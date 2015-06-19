@@ -27,10 +27,10 @@ import Control.Exception as E
 
 
 
-{- main = scotty 3000 $ do -}
-  {- post "/" $ do -}
-    {- beam <- param "word" -}
-    {- html $ mconcat ["<h1>Scotty, ", beam, " me up!</h1>"] -}
+main = WS.scotty 3000 $ do
+  WS.post "/" $ do
+     WS.param "git_log" >>= (\commitLog -> return $ getStories commitLog >>= tagStories) 
+     WS.html "<h1> butts</h1>"
 
 type CommitMessage = String
 type StoryId = String
@@ -75,8 +75,8 @@ storyIdsFromCommits = DL.nub . concat . (MB.mapMaybe parseStoryId)
 
 
 
-getStories :: IO [PivotalStory]
-getStories = liftM MB.catMaybes $ liftM (storyIdsFromCommits . lines) (readFile "release.txt") >>= pivotalStories
+getStories :: BL.ByteString -> IO [PivotalStory]
+getStories gitlog = liftM MB.catMaybes $ pivotalStories . storyIdsFromCommits . lines $ BL.unpack gitlog
 
 
 tagStories :: [PivotalStory] -> IO ()
@@ -95,5 +95,3 @@ tagStory story = do
       Right response -> putStrLn "Success"
       Left response -> print res
 
-main :: IO () 
-main = getStories >>= tagStories
