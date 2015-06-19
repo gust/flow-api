@@ -39,7 +39,7 @@ main =  do
        (liftIO $ (getStories gitLog) >>= (tagStories tag)) >> (WS.html "<h1>success</h1>")
 
 getStories :: BL.ByteString -> IO [PivotalStory]
-getStories gitLog =  liftM MB.catMaybes $ pivotalStories . storyIdsFromCommits . lines . BCH.unpack $ BL.toStrict gitLog
+getStories gitLog =  liftM MB.catMaybes $ pivotalStories . storyIdsFromCommits $ lines (lazyByteStringToString gitLog)
 
 tagStories :: Tag -> [PivotalStory] -> IO ()
 tagStories tag = mapM_ (tagStory tag)
