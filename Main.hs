@@ -35,14 +35,19 @@ main =  do
     WS.post "/" $ do
        gitLog <- WS.param "git_log"
        app    <- WS.param "app"
-       let tag = "deployed to " ++ (read $ lazyByteStringToString app)
+       let tag = "deployed to " ++ (lazyByteStringToString app)
+       liftIO $ putStrLn tag
        (liftIO $ (getStories gitLog) >>= (tagStories tag)) >> (WS.html "<h1>success</h1>")
 
 getStories :: BL.ByteString -> IO [PivotalStory]
 getStories gitLog =  liftM MB.catMaybes $ pivotalStories . storyIdsFromCommits $ lines (lazyByteStringToString gitLog)
 
 tagStories :: Tag -> [PivotalStory] -> IO ()
-tagStories tag = mapM_ (tagStory tag)
+tagStories tag stories = do 
+  print "Beg of tag stories"
+  print tag
+  print stories
+  mapM_ (tagStory tag) stories
 
 getApiToken :: IO BCH.ByteString
 getApiToken = liftM BCH.pack $ getEnv "PIVOTAL_TRACKER_API_TOKEN"
