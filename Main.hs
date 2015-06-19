@@ -3,15 +3,19 @@ import qualified Web.Scotty as WS
 import Data.Monoid
 import Control.Monad(liftM)
 import TrackerTagging
+import qualified Data.ByteString.Lazy as BL
 import qualified Data.List as DL
 import qualified Data.ByteString.Char8 as BCH
 import qualified Data.Maybe as MB
+import Control.Applicative((<$>))
 import qualified Data.Text as T
 import qualified Text.Regex as TR
 import System.Environment(getEnv)
 import Network.Wreq(FormParam( (:=) ), postWith, defaults, getWith, responseBody, header)
+import Data.Scientific(coefficient)
+import Data.Aeson(Value(..))
 import Data.Aeson.Lens (_String, key, _Integer)
-import Control.Lens((.~), (^.), (&))
+import Control.Lens((.~), (^.), (^?), (&), re)
 import Network.HTTP.Conduit(HttpException(StatusCodeException) )
 import qualified Network.HTTP.Types as NHT
 import Control.Exception as E
@@ -30,7 +34,7 @@ import Control.Exception as E
 
 type CommitMessage = String
 type StoryId = String
-data PivotalStory = PivotalStory { projectId :: Sum Integer, storyId :: T.Text } deriving Show
+data PivotalStory = PivotalStory { projectId ::  Integer, storyId :: T.Text } deriving Show
 
 
 getApiToken :: IO BCH.ByteString
@@ -38,28 +42,30 @@ getApiToken = liftM BCH.pack $ getEnv "PIVOTAL_TRACKER_API_TOKEN"
 
 pivotalApiOptions token = defaults & header "X-TrackerToken" .~ [token] 
 
-pivotalStories :: [StoryId] -> IO [PivotalStory]
+
+pivotalStories :: [StoryId] -> IO [Maybe PivotalStory]
 pivotalStories storyIds = mapM getStory storyIds where
-  getStory :: StoryId -> IO PivotalStory
+  getStory :: StoryId -> IO (Maybe PivotalStory)
   getStory storyId = do 
     apiToken <- getApiToken
     let options = pivotalApiOptions apiToken
     res <- tryRequest (getWith options $ "https://www.pivotaltracker.com/services/v5/stories/" ++ storyId) 
     case res of 
-      Right response -> do 
-        let pivotalProjectId =  response ^. responseBody . key "project_id" . _Integer
-        return $ PivotalStory (Sum pivotalProjectId ) $ T.pack storyId
+      (Right response) -> do 
+        let pivotalProjectId =  response ^? responseBody . key "project_id"
+        case pivotalProjectId of 
+          Just (Number projectId) -> return . Just $ PivotalStory (coefficient projectId) $ T.pack storyId
+          Nothing    -> return Nothing
       Left (StatusCodeException status headers _) -> do
         case NHT.statusCode status of
-          -- We get a 403 when someone links to an epic
-          403 -> return $ PivotalStory (Sum 0) $ T.pack storyId
-          404 -> return $ PivotalStory (Sum 0) $ T.pack  storyId
+          403 -> return Nothing
+          404 -> return Nothing
           _   -> do
             putStrLn $ "Could not process request for story: " ++ storyId ++ " defaulting to not accepted"
-            return $ PivotalStory 0.0 $ T.pack storyId
+            return Nothing
+
 tryRequest :: IO a ->  IO (Either HttpException a)
 tryRequest = E.try
-
 
 storyIdsFromCommits :: [CommitMessage] -> [StoryId]
 storyIdsFromCommits = DL.nub . concat . (MB.mapMaybe parseStoryId)
@@ -70,16 +76,14 @@ storyIdsFromCommits = DL.nub . concat . (MB.mapMaybe parseStoryId)
 
 
 getStories :: IO [PivotalStory]
-getStories = liftM (storyIdsFromCommits . lines) (readFile "release.txt") >>= pivotalStories
+getStories = liftM MB.catMaybes $ liftM (storyIdsFromCommits . lines) (readFile "release.txt") >>= pivotalStories
 
 
 tagStories :: [PivotalStory] -> IO ()
-tagStories stories = mapM tagStory stories >> return ()
-
-{- curl Content-Type: application/json" -d '{"name":"testarooni"}'  "" -}
+tagStories = mapM_ tagStory 
 
 storyPostUrl :: PivotalStory -> String
-storyPostUrl story = concat ["https://www.pivotaltracker.com/services/v5/projects/", show (getSum $ projectId story), "/stories/", T.unpack (storyId story),  "/labels"] 
+storyPostUrl story = concat ["https://www.pivotaltracker.com/services/v5/projects/", show (projectId story), "/stories/", T.unpack (storyId story),  "/labels"] 
 
 tagStory :: PivotalStory -> IO ()
 tagStory story = do 
