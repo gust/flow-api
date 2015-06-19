@@ -1,7 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 import qualified Web.Scotty as WS
+import Data.String
 import Data.Monoid
 import Control.Monad(liftM)
+import Control.Monad.Trans
 import TrackerTagging
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.List as DL
@@ -20,22 +22,20 @@ import Network.HTTP.Conduit(HttpException(StatusCodeException) )
 import qualified Network.HTTP.Types as NHT
 import Control.Exception as E
 
-
-
-
-
-
-
-
-main = WS.scotty 3000 $ do
-  WS.post "/" $ do
-     WS.param "git_log" >>= (\commitLog -> return $ getStories commitLog >>= tagStories) 
-     WS.html "<h1> butts</h1>"
-
 type CommitMessage = String
 type StoryId = String
 data PivotalStory = PivotalStory { projectId ::  Integer, storyId :: T.Text } deriving Show
 
+main = WS.scotty 3000 $ do
+  WS.post "/" $ do
+     git_log <- WS.param "git_log"
+     (liftIO $ (getStories git_log) >>= tagStories) >> (WS.html $ mconcat ["<h1> butts</h1>"])
+
+getStories :: BL.ByteString -> IO [PivotalStory]
+getStories gitLog =  liftM MB.catMaybes $ pivotalStories . storyIdsFromCommits . lines . BCH.unpack $ BL.toStrict gitLog
+
+tagStories :: [PivotalStory] -> IO ()
+tagStories = mapM_ tagStory
 
 getApiToken :: IO BCH.ByteString
 getApiToken = liftM BCH.pack $ getEnv "PIVOTAL_TRACKER_API_TOKEN"
@@ -50,9 +50,10 @@ pivotalStories storyIds = mapM getStory storyIds where
     apiToken <- getApiToken
     let options = pivotalApiOptions apiToken
     res <- tryRequest (getWith options $ "https://www.pivotaltracker.com/services/v5/stories/" ++ storyId) 
+
     case res of 
       (Right response) -> do 
-        let pivotalProjectId =  response ^? responseBody . key "project_id"
+        let pivotalProjectId = response ^? responseBody . key "project_id"
         case pivotalProjectId of 
           Just (Number projectId) -> return . Just $ PivotalStory (coefficient projectId) $ T.pack storyId
           Nothing    -> return Nothing
@@ -75,12 +76,6 @@ storyIdsFromCommits = DL.nub . concat . (MB.mapMaybe parseStoryId)
 
 
 
-getStories :: BL.ByteString -> IO [PivotalStory]
-getStories gitlog = liftM MB.catMaybes $ pivotalStories . storyIdsFromCommits . lines $ BL.unpack gitlog
-
-
-tagStories :: [PivotalStory] -> IO ()
-tagStories = mapM_ tagStory 
 
 storyPostUrl :: PivotalStory -> String
 storyPostUrl story = concat ["https://www.pivotaltracker.com/services/v5/projects/", show (projectId story), "/stories/", T.unpack (storyId story),  "/labels"] 
@@ -90,8 +85,4 @@ tagStory story = do
     apiToken <- getApiToken
     let requestOptions = (pivotalApiOptions apiToken) & header "Content-Type" .~ ["application/json"]
     let formBody = BCH.pack "name" := ("super-butts" :: String)
-    res <- tryRequest $ postWith requestOptions (storyPostUrl story) formBody
-    case res of 
-      Right response -> putStrLn "Success"
-      Left response -> print res
-
+    (tryRequest $ postWith requestOptions (storyPostUrl story) formBody) >> return ()

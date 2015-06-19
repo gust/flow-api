@@ -32,6 +32,7 @@ executable flow-api
       , http-types
       , aeson
       , scientific
+      , mtl
 
 
 

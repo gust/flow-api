@@ -1,4 +1,4 @@
-* Noah Gordon: Resolve stripe-ruby-mock dependencies to fix cuke suite [#95254236]
+git_log=* Noah Gordon: Resolve stripe-ruby-mock dependencies to fix cuke suite [#95254236]
 * Kara Bernert and Todd Mohney: Extract class refactor of pitch deck button presenter [#95254230]
 * James Vanneman and Kara Bernert: Fix pitch deck refreshing to new page after upload [#95254226]
 * This story must have gotten deleted [#9412435223423624]
