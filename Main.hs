@@ -55,6 +55,7 @@ pivotalStories storyIds = mapM getStory storyIds where
   getStory :: StoryId -> IO (Maybe PivotalStory)
   getStory storyId = do 
     apiToken <- getApiToken
+    print $ "Getting Story with Token " ++ BCH.unpack apiToken
     let options = pivotalApiOptions apiToken
     res <- tryRequest (getWith options $ "https://www.pivotaltracker.com/services/v5/stories/" ++ storyId) 
 
@@ -92,4 +93,9 @@ tagStory tag story = do
     apiToken <- getApiToken
     let requestOptions = (pivotalApiOptions apiToken) & header "Content-Type" .~ ["application/json"]
     let formBody = "name" := tag
-    (tryRequest $ postWith requestOptions (storyPostUrl story) formBody) >> return ()
+    response <- (tryRequest $ postWith requestOptions (storyPostUrl story) formBody)
+    case response of 
+      Right res -> BL.putStrLn $ res ^. responseBody
+      Left (StatusCodeException status headers _) -> do
+        putStrLn $ "Error! status code: " ++ (show status)
+
