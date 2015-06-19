@@ -24,18 +24,25 @@ import Control.Exception as E
 
 type CommitMessage = String
 type StoryId = String
+type Tag = String
 data PivotalStory = PivotalStory { projectId ::  Integer, storyId :: T.Text } deriving Show
 
-main = WS.scotty 3000 $ do
-  WS.post "/" $ do
-     git_log <- WS.param "git_log"
-     (liftIO $ (getStories git_log) >>= tagStories) >> (WS.html $ mconcat ["<h1> butts</h1>"])
+lazyByteStringToString = BCH.unpack . BL.toStrict 
+
+main =  do 
+  port <- liftM read $ getEnv "FLOW_API_PORT"
+  WS.scotty port $ do
+    WS.post "/" $ do
+       gitLog <- WS.param "git_log"
+       app    <- WS.param "app"
+       let tag = "deployed to " ++ (read $ lazyByteStringToString app)
+       (liftIO $ (getStories gitLog) >>= (tagStories tag)) >> (WS.html "<h1>success</h1>")
 
 getStories :: BL.ByteString -> IO [PivotalStory]
 getStories gitLog =  liftM MB.catMaybes $ pivotalStories . storyIdsFromCommits . lines . BCH.unpack $ BL.toStrict gitLog
 
-tagStories :: [PivotalStory] -> IO ()
-tagStories = mapM_ tagStory
+tagStories :: Tag -> [PivotalStory] -> IO ()
+tagStories tag = mapM_ (tagStory tag)
 
 getApiToken :: IO BCH.ByteString
 getApiToken = liftM BCH.pack $ getEnv "PIVOTAL_TRACKER_API_TOKEN"
@@ -80,9 +87,9 @@ storyIdsFromCommits = DL.nub . concat . (MB.mapMaybe parseStoryId)
 storyPostUrl :: PivotalStory -> String
 storyPostUrl story = concat ["https://www.pivotaltracker.com/services/v5/projects/", show (projectId story), "/stories/", T.unpack (storyId story),  "/labels"] 
 
-tagStory :: PivotalStory -> IO ()
-tagStory story = do 
+tagStory :: Tag -> PivotalStory -> IO ()
+tagStory tag story = do 
     apiToken <- getApiToken
     let requestOptions = (pivotalApiOptions apiToken) & header "Content-Type" .~ ["application/json"]
-    let formBody = BCH.pack "name" := ("super-butts" :: String)
+    let formBody = "name" := tag
     (tryRequest $ postWith requestOptions (storyPostUrl story) formBody) >> return ()
