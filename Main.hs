@@ -35,7 +35,7 @@ data PivotalStory = PivotalStory { projectId ::  Integer, storyId :: BCH.ByteStr
 lazyByteStringToString = BCH.unpack . BL.toStrict
 
 main =  do
-  port <- liftM read $ getEnv "FLOW_API_PORT"
+  port <- liftM read $ getEnv "PORT"
   WS.scotty port $ do
     WS.post "/" $ do
        gitLog <- WS.param "git_log"
