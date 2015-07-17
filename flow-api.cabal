@@ -10,7 +10,7 @@ license-file:        LICENSE
 author:              James Vanneman and Todd Mohney
 maintainer:          james@gust.com todd@gust.com
 -- copyright:           
--- category:            
+category:            Web
 build-type:          Simple
 -- extra-source-files:  
 cabal-version:       >=1.10
