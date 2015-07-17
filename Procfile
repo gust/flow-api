@@ -1,1 +1,1 @@
-web: ./dist/build/flow-api/flow-api
+web: cabal run -- -p $PORT
