@@ -1,4 +1,16 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE EmptyDataDecls       #-}
+{-# LANGUAGE FlexibleContexts     #-}
+{-# LANGUAGE FlexibleInstances    #-}
+{-# LANGUAGE GADTs                #-}
+{-# LANGUAGE OverloadedStrings    #-}
+{-# LANGUAGE QuasiQuotes          #-}
+{-# LANGUAGE TemplateHaskell      #-}
+{-# LANGUAGE TypeFamilies         #-}
+{-# LANGUAGE MultiParamTypeClasses#-}
+{-# LANGUAGE GeneralizedNewtypeDeriving#-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
+
 import qualified Web.Scotty as WS
 import Data.String
 import Data.Monoid
@@ -26,22 +38,57 @@ import Control.Lens((.~), (^.), (^?), (&), re)
 import Network.HTTP.Conduit(HttpException(StatusCodeException) )
 import qualified Network.HTTP.Types as NHT
 import Control.Exception as E
+import Database.Persist
+import Database.Persist.TH
+import Database.Persist.Postgresql
+import Data.Time (UTCTime, getCurrentTime)
+import Control.Monad.Trans.Resource (runResourceT, ResourceT)
+import Control.Monad.Logger
 
 type CommitMessage = String
 type StoryId = String
 type Label = String
-data PivotalStory = PivotalStory { projectId ::  Integer, storyId :: BCH.ByteString } deriving Show
 
 lazyByteStringToString = BCH.unpack . BL.toStrict
+lazyByteStringToText   = T.pack . lazyByteStringToString
 
-main =  do
-  port <- liftM read $ getEnv "PORT"
-  WS.scotty port $ do
-    WS.post "/" $ do
-       gitLog <- WS.param "git_log"
-       app    <- WS.param "app"
-       let label = "deployed to " ++ (lazyByteStringToString app)
-       (liftIO $ (getStories gitLog) >>= (updateLabelsOnStories label)) >> (WS.html "<h1>success</h1>")
+share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
+Release
+  title T.Text
+  createdAt UTCTime
+  deriving Show
+
+ReleaseAuthor
+  releaseId ReleaseId
+  userId UserId
+  deriving Show
+
+ReleaseStory
+  releaseId ReleaseId
+  pivotalStoryId PivotalStoryId
+  commitSha T.Text
+  UniqueReleaseStoryCommit releaseId pivotalStoryId commitSha
+  deriving Show
+
+PivotalStory
+  projectId Int
+  trackerId T.Text
+  deriving Show
+
+User
+  firstName T.Text
+  lastName T.Text
+  deriving Show
+|]
+
+connStr = "host=localhost dbname=flow_api user=gust port=5432"
+-- runSqlConn :: MonadBaseControl IO m => SqlPersistT m a -> SqlBackend -> m a
+-- withSqlConn :: (MonadIO m, MonadBaseControl IO m, MonadLogger m) => (LogFunc -> IO SqlBackend) -> (SqlBackend -> m a) -> m a
+-- withPostgresqlConn :: (MonadIO m, MonadBaseControl IO m, MonadLogger m) => ConnectionString -> (SqlBackend -> m a) -> m a
+
+createReleaseStory :: [PivotalStory] -> IO ()
+createReleaseStory = undefined
+
 
 getStories :: BL.ByteString -> IO [PivotalStory]
 getStories gitLog =  liftM MB.catMaybes $ pivotalStories . storyIdsFromCommits $ lines (lazyByteStringToString gitLog)
@@ -68,7 +115,7 @@ pivotalStories storyIds = mapM getStory storyIds where
       (Right response) -> do
         let pivotalProjectId = response ^? responseBody . key "project_id"
         case pivotalProjectId of
-          Just (Number projectId) -> return . Just $ PivotalStory (coefficient projectId) $ BCH.pack storyId
+          Just (Number projectId) -> return . Just $ PivotalStory (fromIntegral $ coefficient projectId) $ T.pack storyId
           Nothing    -> return Nothing
       Left (StatusCodeException status headers _) -> do
         case NHT.statusCode status of
@@ -90,7 +137,7 @@ storyIdsFromCommits = DL.nub . concat . (MB.mapMaybe parseStoryId)
 data PivotalLabel = PivotalLabel { labelId :: Integer, labelText :: BCH.ByteString  } deriving Show
 
 labelsUrl :: PivotalStory -> String
-labelsUrl story = concat ["https://www.pivotaltracker.com/services/v5/projects/", show (projectId story), "/stories/", BCH.unpack (storyId story),  "/labels"]
+labelsUrl story = concat ["https://www.pivotaltracker.com/services/v5/projects/", show (pivotalStoryProjectId story), "/stories/", (T.unpack $ pivotalStoryTrackerId story),  "/labels"]
 
 getPreviousDeployLabels :: PivotalStory -> IO [PivotalLabel]
 getPreviousDeployLabels story = do
@@ -117,8 +164,9 @@ pivotalLabelsFromReponse (Object val) = PivotalLabel <$> (extractInteger <$> HMS
 emptyBody = "" :: BCH.ByteString
 
 
-labelDestroyUrl :: PivotalStory -> PivotalLabel ->  String
-labelDestroyUrl story label = concat ["https://www.pivotaltracker.com/services/v5/projects/", show (projectId story), "/stories/", BCH.unpack (storyId story), "/labels/", show (labelId label)]
+intToText = T.pack . show
+labelDestroyUrl :: PivotalStory -> PivotalLabel ->  T.Text
+labelDestroyUrl story label = T.concat ["https://www.pivotaltracker.com/services/v5/projects/", intToText (pivotalStoryProjectId story), "/stories/", (pivotalStoryTrackerId story), "/labels/", (T.pack . show $ labelId label) ]
 
 removeLabels :: PivotalStory -> [PivotalLabel] -> IO ()
 removeLabels story labels = do
@@ -127,8 +175,7 @@ removeLabels story labels = do
     removeLabel label = do
       apiToken <- getApiToken
       let requestOptions = (pivotalApiOptions apiToken) & header "Content-Type" .~ ["application/json"]
-      putStrLn $ labelDestroyUrl story label
-      tryRequest $ deleteWith requestOptions (labelDestroyUrl story label)
+      tryRequest $ deleteWith requestOptions $ T.unpack $ labelDestroyUrl story label
 
 partOfDeployPipeline :: PivotalLabel -> Bool
 partOfDeployPipeline label = labelText label `elem` deploymentPipelineLabels
@@ -162,3 +209,24 @@ labelStory label story = do
     let requestOptions = (pivotalApiOptions apiToken) & header "Content-Type" .~ ["application/json"]
     let formBody = "name" := label
     (tryRequest $ postWith requestOptions (labelsUrl story) formBody) >> return ()
+
+main :: IO ()
+main =  do
+  runStdoutLoggingT $ withPostgresqlPool connStr 10 $ \pool -> do 
+     liftIO $ flip runSqlPersistMPool pool $ runMigration migrateAll
+  {- port <- liftM read $ getEnv "PORT" -}
+  {- WS.scotty port $ do -}
+    {- WS.post "/" $ do -}
+       {- gitLog <- WS.param "git_log" -}
+       {- app    <- WS.param "app" -}
+       {- let label = "deployed to " ++ (lazyByteStringToString app) -}
+       {- (liftIO $ (getStories gitLog) >>= (updateLabelsOnStories label)) >> (WS.html "<h1>success</h1>") -}
+    {- WS.post "/releases" $ do -}
+       {- gitLog <- WS.param "git_log" -}
+       {- app    <- WS.param "app" -}
+       {- let label = "deployed to " ++ (lazyByteStringToString app) -}
+       {- pivotalStories <- liftIO $ getStories gitLog -}
+       {- (liftIO $ updateLabelsOnStories label pivotalStories) >> WS.html "<h1>success</h1>" -}
+       {- liftIO $ createReleaseStory pivotalStories -}
+
+
