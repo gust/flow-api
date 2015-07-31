@@ -2,11 +2,6 @@
 
 import Migrations
 import qualified Web.Scotty as WS
-import Data.String
-import Data.Monoid
-import Control.Monad.Trans
-import Control.Monad.Trans.Reader(runReaderT)
-import qualified Data.Text as T
 import Control.Monad.Trans
 import TrackerTagging
 import PivotalTracker
@@ -14,7 +9,6 @@ import Database.Persist
 import System.Environment(getEnv)
 import Control.Monad(liftM)
 import Database.Persist.Postgresql
-import Control.Monad.Trans.Resource (runResourceT, ResourceT)
 import Control.Monad.Logger
 
 

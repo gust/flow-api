@@ -40,7 +40,6 @@ executable flow-api
       , persistent
       , persistent-template
       , time
-      , resourcet
       , monad-logger
       , transformers
 
