@@ -15,6 +15,7 @@ import qualified Web.Scotty as WS
 import Data.String
 import Data.Monoid
 import Control.Monad.Trans
+import Control.Monad.Trans.Reader(runReaderT)
 import qualified Data.HashMap.Strict as HMS
 import Data.Scientific(coefficient)
 import Control.Applicative((<$>), (<*>))
@@ -85,9 +86,6 @@ connStr = "host=localhost dbname=flow_api user=gust port=5432"
 -- runSqlConn :: MonadBaseControl IO m => SqlPersistT m a -> SqlBackend -> m a
 -- withSqlConn :: (MonadIO m, MonadBaseControl IO m, MonadLogger m) => (LogFunc -> IO SqlBackend) -> (SqlBackend -> m a) -> m a
 -- withPostgresqlConn :: (MonadIO m, MonadBaseControl IO m, MonadLogger m) => ConnectionString -> (SqlBackend -> m a) -> m a
-
-createReleaseStory :: [PivotalStory] -> IO ()
-createReleaseStory = undefined
 
 
 getStories :: BL.ByteString -> IO [PivotalStory]
@@ -210,23 +208,26 @@ labelStory label story = do
     let formBody = "name" := label
     (tryRequest $ postWith requestOptions (labelsUrl story) formBody) >> return ()
 
+runDbIO statement = runStdoutLoggingT $ withPostgresqlConn connStr $ \connection -> do
+          liftIO $ runSqlPersistM statement connection
 main :: IO ()
 main =  do
-  runStdoutLoggingT $ withPostgresqlPool connStr 10 $ \pool -> do 
-     liftIO $ flip runSqlPersistMPool pool $ runMigration migrateAll
-  {- port <- liftM read $ getEnv "PORT" -}
-  {- WS.scotty port $ do -}
-    {- WS.post "/" $ do -}
-       {- gitLog <- WS.param "git_log" -}
-       {- app    <- WS.param "app" -}
-       {- let label = "deployed to " ++ (lazyByteStringToString app) -}
-       {- (liftIO $ (getStories gitLog) >>= (updateLabelsOnStories label)) >> (WS.html "<h1>success</h1>") -}
-    {- WS.post "/releases" $ do -}
-       {- gitLog <- WS.param "git_log" -}
-       {- app    <- WS.param "app" -}
-       {- let label = "deployed to " ++ (lazyByteStringToString app) -}
-       {- pivotalStories <- liftIO $ getStories gitLog -}
-       {- (liftIO $ updateLabelsOnStories label pivotalStories) >> WS.html "<h1>success</h1>" -}
-       {- liftIO $ createReleaseStory pivotalStories -}
+  runDbIO $ runMigrationUnsafe migrateAll
+  port <- liftM read $ getEnv "PORT"
+  WS.scotty port $ do
+    WS.post "/" $ do
+       gitLog <- WS.param "git_log"
+       app    <- WS.param "app"
+       let label = "deployed to " ++ (lazyByteStringToString app)
+       (liftIO $ (getStories gitLog) >>= (updateLabelsOnStories label)) >> (WS.html "<h1>success</h1>")
+    WS.post "/releases" $ do
+       gitLog <- WS.param "git_log"
+       app    <- WS.param "app"
+       let label = "deployed to " ++ (lazyByteStringToString app)
+       pivotalStories <- liftIO $ getStories gitLog
+       (liftIO $ updateLabelsOnStories label pivotalStories) >> WS.html "<h1>success</h1>"
+       runStdoutLoggingT $ withPostgresqlConn connStr $ \connection -> do
+          liftIO $ runSqlPersistM (insertMany pivotalStories) connection
+       return ()
 
 

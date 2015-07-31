@@ -42,6 +42,7 @@ executable flow-api
       , time
       , resourcet
       , monad-logger
+      , transformers
 
 
   -- hs-source-dirs:    
