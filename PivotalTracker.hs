@@ -1,14 +1,16 @@
 {-# LANGUAGE OverloadedStrings    #-}
 
 module PivotalTracker where
+import Control.Monad.Trans(lift)
 import Migrations
+import Control.Monad.Trans.Reader
 import Control.Lens((.~), (^.), (^?), (&), re)
 import qualified Data.ByteString.Char8 as BCH
 import Control.Monad(liftM, (>=>))
 import System.Environment(getEnv)
 import Network.HTTP.Conduit(HttpException(StatusCodeException) )
 import Control.Exception as E
-import Network.Wreq(FormParam( (:=) ), deleteWith, postWith, defaults, getWith, responseBody, header)
+import Network.Wreq(FormParam( (:=) ), defaults, responseBody, header, Response)
 import Data.Aeson.Lens (_String, key, _Integer, _Array, _Value)
 import Data.Aeson(Value(..))
 import Data.Scientific(coefficient)
@@ -21,16 +23,24 @@ import qualified Data.Maybe as MB
 import qualified Data.HashMap.Strict as HMS
 import qualified Text.Regex as TR
 import qualified Data.Vector as V
+import App.Environment
 
 type StoryId = String
 data PivotalLabel = PivotalLabel { labelId :: Integer, labelText :: BCH.ByteString  } deriving Show
 type CommitMessage = String
 type Label = String
 
-lazyByteStringToString = BCH.unpack . BL.toStrict
+getStories :: Monad m => BL.ByteString -> ReaderT Environment m [PivotalStory]
+getStories gitLog =  liftM MB.catMaybes $ pivotalStories . storyIdsFromCommits $ lines (lazyByteStringToString gitLog)
 
-tryRequest :: IO a ->  IO (Either HttpException a)
-tryRequest = E.try
+updateLabelsOnStories :: Monad m => String -> [PivotalStory] -> ReaderT Environment m ()
+updateLabelsOnStories label stories = mapM_ (updateLabels label) stories
+
+getApiToken :: IO BCH.ByteString
+getApiToken = liftM BCH.pack $ getEnv "PIVOTAL_TRACKER_API_TOKEN"
+
+tryRequest :: Monad m => m a ->  m (Either HttpException a)
+tryRequest = undefined
 
 labelsUrl :: PivotalStory -> String
 labelsUrl story = concat ["https://www.pivotaltracker.com/services/v5/projects/", show (pivotalStoryProjectId story), "/stories/", (T.unpack $ pivotalStoryTrackerId story),  "/labels"]
@@ -48,15 +58,24 @@ pivotalLabelsFromReponse (Object val) = PivotalLabel <$> (extractInteger <$> HMS
 
 emptyBody = "" :: BCH.ByteString
 
+getWith :: Monad m => a -> String -> m (Response BL.ByteString)
+getWith = undefined
+
+postWith :: Monad m => a -> String -> b -> m (Response BL.ByteString)
+postWith = undefined
+
+deleteWith :: Monad m => a -> String -> m (Response BL.ByteString)
+deleteWith = undefined
+
 intToText = T.pack . show
 labelDestroyUrl :: PivotalStory -> PivotalLabel ->  T.Text
 labelDestroyUrl story label = T.concat ["https://www.pivotaltracker.com/services/v5/projects/", intToText (pivotalStoryProjectId story), "/stories/", (pivotalStoryTrackerId story), "/labels/", (T.pack . show $ labelId label) ]
 
-getPreviousDeployLabels :: PivotalStory -> IO [PivotalLabel]
+getPreviousDeployLabels :: Monad m => PivotalStory -> ReaderT Environment m [PivotalLabel]
 getPreviousDeployLabels story = do
-    apiToken <- getApiToken
+    apiToken <- pivotalTrackerApiToken `liftM` ask 
     let requestOptions = (pivotalApiOptions apiToken) & header "Content-Type" .~ ["application/json"]
-    response <- tryRequest $ getWith requestOptions (labelsUrl story)
+    response <- lift . tryRequest $ getWith requestOptions (labelsUrl story)
     case response of
       Right res -> do
         let stories = MB.catMaybes  . V.toList $ V.map pivotalLabelsFromReponse (res ^. responseBody . _Array)
@@ -65,11 +84,8 @@ getPreviousDeployLabels story = do
 
 
 pivotalApiOptions token = defaults & header "X-TrackerToken" .~ [token]
-getApiToken :: IO BCH.ByteString
-getApiToken = liftM BCH.pack $ getEnv "PIVOTAL_TRACKER_API_TOKEN"
 
-getStories :: BL.ByteString -> IO [PivotalStory]
-getStories gitLog =  liftM MB.catMaybes $ pivotalStories . storyIdsFromCommits $ lines (lazyByteStringToString gitLog)
+lazyByteStringToString = BCH.unpack . BL.toStrict
 
 storyIdsFromCommits :: [CommitMessage] -> [StoryId]
 storyIdsFromCommits = DL.nub . concat . (MB.mapMaybe parseStoryId)
@@ -77,42 +93,43 @@ storyIdsFromCommits = DL.nub . concat . (MB.mapMaybe parseStoryId)
     parseStoryId :: CommitMessage -> Maybe [StoryId]
     parseStoryId = TR.matchRegex (TR.mkRegex "#([0-9]*)")
 
-updateLabelsOnStories :: Label -> [PivotalStory] -> IO ()
-updateLabelsOnStories label stories = do
-  mapM_ (updateLabels label) stories
 
-
-pivotalStories :: [StoryId] -> IO [Maybe PivotalStory]
+pivotalStories :: Monad m => [StoryId] -> ReaderT Environment m [Maybe PivotalStory]
 pivotalStories storyIds = mapM getStory storyIds where
-  getStory :: StoryId -> IO (Maybe PivotalStory)
-  getStory storyId = do
-    apiToken <- getApiToken
-    let options = pivotalApiOptions apiToken
-    res <- tryRequest (getWith options $ "https://www.pivotaltracker.com/services/v5/stories/" ++ storyId)
 
-    case res of
-      (Right response) -> do
-        let pivotalProjectId = response ^? responseBody . key "project_id"
-        case pivotalProjectId of
-          Just (Number projectId) -> return . Just $ PivotalStory (fromIntegral $ coefficient projectId) $ T.pack storyId
-          Nothing    -> return Nothing
-      Left (StatusCodeException status headers _) -> do
-        case NHT.statusCode status of
-          403 -> return Nothing
-          404 -> return Nothing
-          _   -> do
-            putStrLn $ "Could not process request for story: " ++ storyId ++ " defaulting to not accepted"
-            return Nothing
+logError :: Monad m => m a
+logError = undefined
+
+getStory :: Monad m => StoryId -> ReaderT Environment m (Maybe PivotalStory)
+getStory storyId = do
+  apiToken <- pivotalTrackerApiToken `liftM` ask 
+  let options = pivotalApiOptions apiToken
+  res <- tryRequest (getWith options $ "https://www.pivotaltracker.com/services/v5/stories/" ++ storyId)
+  case res of
+    (Right response) -> do
+      let pivotalProjectId = response ^? responseBody . key "project_id"
+      case pivotalProjectId of
+        Just (Number projectId) -> return . Just $ PivotalStory (fromIntegral $ coefficient projectId) $ T.pack storyId
+        Nothing    -> return Nothing
+    Left (StatusCodeException status headers _) -> do
+      case NHT.statusCode status of
+        403 -> return Nothing
+        404 -> return Nothing
+        _   -> do
+          logError $ "Could not process request for story: " ++ storyId ++ " defaulting to not accepted"
+          return Nothing
 
 
-removeLabels :: PivotalStory -> [PivotalLabel] -> IO ()
+removeLabels :: Monad m => PivotalStory -> [PivotalLabel] -> ReaderT Environment m ()
 removeLabels story labels = do
   mapM_ removeLabel labels
   where
+    removeLabel :: Monad m => PivotalLabel -> ReaderT Environment m ()
     removeLabel label = do
-      apiToken <- getApiToken
+      apiToken <- pivotalTrackerApiToken `liftM` ask 
       let requestOptions = (pivotalApiOptions apiToken) & header "Content-Type" .~ ["application/json"]
-      tryRequest $ deleteWith requestOptions $ T.unpack $ labelDestroyUrl story label
+      lift . tryRequest . (deleteWith requestOptions) . T.unpack $ labelDestroyUrl story label
+      return ()
 
 partOfDeployPipeline :: PivotalLabel -> Bool
 partOfDeployPipeline label = labelText label `elem` deploymentPipelineLabels
@@ -132,7 +149,7 @@ newLabelNeeded newLabel previousLabels = (deploymentPipelineLabel newLabel) || (
     inPipeline label = labelText label `elem` deploymentPipelineLabels
 
 
-updateLabels :: Label -> PivotalStory -> IO ()
+updateLabels :: Monad m => Label -> PivotalStory -> ReaderT Environment m ()
 updateLabels label story = do
   previousLabels <- getPreviousDeployLabels story
   if newLabelNeeded label previousLabels
@@ -142,10 +159,11 @@ updateLabels label story = do
     labelStory label story
   else return ()
 
-labelStory :: Label -> PivotalStory -> IO ()
+labelStory :: Monad m => Label -> PivotalStory -> ReaderT Environment m ()
 labelStory label story = do
-    apiToken <- getApiToken
+    apiToken <- pivotalTrackerApiToken `liftM` ask 
     let requestOptions = (pivotalApiOptions apiToken) & header "Content-Type" .~ ["application/json"]
     let formBody = "name" := label
-    (tryRequest $ postWith requestOptions (labelsUrl story) formBody) >> return ()
+    lift $ tryRequest $ postWith requestOptions (labelsUrl story) formBody 
+    return ()
 
