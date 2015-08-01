@@ -5,7 +5,7 @@ import qualified Web.Scotty as WS
 import Control.Monad.Trans
 import Control.Monad.State.Class
 import TrackerTagging
-import PivotalTracker hiding(getApiToken)
+import PivotalTracker
 import Database.Persist
 import Control.Monad.Trans.Reader
 import System.Environment(getEnv)
@@ -45,7 +45,7 @@ main :: IO ()
 main =  do
   apiToken <- BCH.pack `liftM` getEnv "PIVOTAL_TRACKER_API_TOKEN"
   runDbIO $ runMigrationUnsafe migrateAll
-  port <- liftM read $ getEnv "PORT"
+  port <- read `liftM` getEnv "PORT"
   let environment = Environment apiToken
   WS.scotty port $ do
     WS.post "/" $ do

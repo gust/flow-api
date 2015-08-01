@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings    #-}
 
-module PivotalTracker where
+module PivotalTracker(getStories, lazyByteStringToString, updateLabelsOnStories, World(..)) where
 import Control.Monad.Trans(lift)
 import Migrations
 import Control.Monad.Trans.Reader
@@ -43,9 +43,6 @@ getStories gitLog =  liftM MB.catMaybes $ pivotalStories . storyIdsFromCommits $
 
 updateLabelsOnStories :: World m => String -> [PivotalStory] -> ReaderT Environment m ()
 updateLabelsOnStories label stories = mapM_ (updateLabels label) stories
-
-getApiToken :: IO BCH.ByteString
-getApiToken = liftM BCH.pack $ getEnv "PIVOTAL_TRACKER_API_TOKEN"
 
 labelsUrl :: PivotalStory -> String
 labelsUrl story = concat ["https://www.pivotaltracker.com/services/v5/projects/", show (pivotalStoryProjectId story), "/stories/", (T.unpack $ pivotalStoryTrackerId story),  "/labels"]
