@@ -15,7 +15,8 @@ import qualified Data.ByteString.Char8 as BCH
 import Control.Monad.Logger
 import qualified Data.ByteString.Lazy as BL
 import App.Environment
-
+import Control.Exception as E
+import qualified Network.Wreq as NW
 
 
 connStr = "host=localhost dbname=flow_api user=gust port=5432"
@@ -25,16 +26,24 @@ runDbIO statement = runStdoutLoggingT $ withPostgresqlConn connStr $ \connection
 
 
 
-getApiToken :: IO BCH.ByteString
-getApiToken = liftM BCH.pack $ getEnv "PIVOTAL_TRACKER_API_TOKEN"
+instance World IO where
+  getWith = NW.getWith
+  postWith = NW.postWith
+  deleteWith = NW.deleteWith
+  tryRequest = E.try
 
+
+labelStories :: World m => String -> Environment -> BL.ByteString -> m ()
+labelStories label environment gitLog = do 
+  flip runReaderT environment $ do 
+    (getStories gitLog) >>= (updateLabelsOnStories label)
 
 type ReaderIO = ReaderT Environment IO ()
 runReaderIO :: Environment -> ReaderIO -> IO ()
 runReaderIO env r = runReaderT r env
 main :: IO ()
 main =  do
-  apiToken <- getApiToken
+  apiToken <- BCH.pack `liftM` getEnv "PIVOTAL_TRACKER_API_TOKEN"
   runDbIO $ runMigrationUnsafe migrateAll
   port <- liftM read $ getEnv "PORT"
   let environment = Environment apiToken
@@ -43,8 +52,7 @@ main =  do
        gitLog <- WS.param "git_log"
        app    <- WS.param "app"
        let label = "deployed to " ++ (lazyByteStringToString app)
-       liftIO . (runReaderIO environment) $ do 
-        ((getStories gitLog) >>= (updateLabelsOnStories label)) 
+       liftIO $ labelStories label environment gitLog
        WS.html "<h1>success</h1>"
     {- WS.post "/releases" $ do -}
        {- gitLog <- WS.param "git_log" -}

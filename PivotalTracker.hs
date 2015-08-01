@@ -25,19 +25,11 @@ import qualified Data.Vector as V
 import App.Environment
 import qualified Network.Wreq as NW
 import qualified Network.Wreq.Types as NWT
-import Control.Exception as E
 
 type StoryId = String
 data PivotalLabel = PivotalLabel { labelId :: Integer, labelText :: BCH.ByteString  } deriving Show
 type CommitMessage = String
 type Label = String
-
-instance World IO where
-  getWith = NW.getWith
-  postWith = NW.postWith
-  deleteWith = NW.deleteWith
-  tryRequest = E.try
-
 
 class Monad m => World m where
   getWith :: Monad m => NW.Options -> String -> m (Response BL.ByteString)
