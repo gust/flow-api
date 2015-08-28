@@ -4,5 +4,3 @@ import qualified Data.ByteString.Char8 as BCH
 data Environment = Environment {
   pivotalTrackerApiToken :: BCH.ByteString
 }
-
-

@@ -2,22 +2,21 @@
 
 import Migrations
 import qualified Web.Scotty as WS
-import Control.Monad.Trans
-import Control.Monad.State.Class
+import Control.Monad.Trans(liftIO)
 import Data.Time.Clock(getCurrentTime)
 import TrackerTagging
 import PivotalTracker
 import Database.Persist
-import Control.Monad.Trans.Reader
+import Control.Monad.Trans.Reader( ReaderT(..))
 import System.Environment(getEnv)
 import Control.Monad(liftM)
 import Database.Persist.Postgresql
 import qualified Data.ByteString.Char8 as BCH
-import Control.Monad.Logger
+import Control.Monad.Logger(runStdoutLoggingT)
 import qualified Data.ByteString.Lazy as BL
 import App.Environment
-import Control.Exception as E
-import qualified Network.Wreq as NW
+import Label(updateLabelsOnStories)
+import World
 
 
 connStr = "host=localhost dbname=flow_api user=gust port=5432"
@@ -25,13 +24,6 @@ connStr = "host=localhost dbname=flow_api user=gust port=5432"
 runDbIO statement = runStdoutLoggingT $ withPostgresqlConn connStr $ \connection -> do
           liftIO $ runSqlPersistM statement connection
 
-
-
-instance World IO where
-  getWith = NW.getWith
-  postWith = NW.postWith
-  deleteWith = NW.deleteWith
-  tryRequest = E.try
 
 
 
@@ -67,12 +59,10 @@ main =  do
          pivotalStories <- getStories gitLog
          updateLabelsOnStories label pivotalStories
          -- Why does this compile? Doesn't runStdoutLoggingT return IO??
-         runStdoutLoggingT $ withPostgresqlConn connStr $ \connection -> do
-            liftIO $ flip runSqlPersistM connection $ do
-              pivotalIds <- insertMany pivotalStories
-              time <- liftIO getCurrentTime
-              releaseId <- insert $ Release time 
-              let releaseStories = map (getReleaseStory releaseId) pivotalIds
-              insertMany releaseStories
-
+         runDbIO $ do
+           pivotalIds <- insertMany pivotalStories
+           time <- liftIO getCurrentTime
+           releaseId <- insert $ Release time 
+           let releaseStories = map (getReleaseStory releaseId) pivotalIds
+           insertMany releaseStories
        WS.html "Success!"

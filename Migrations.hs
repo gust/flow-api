@@ -32,5 +32,20 @@ PivotalStory
   trackerId T.Text
   name T.Text
   description T.Text
+  kind T.Text
+  requested_by_id Int
+  story_type T.Text
+  url T.Text
+  owners [PivotalUser]
+  deriving Show
+
+PivotalStoryOwner
+  pivotalUserId PivotalUserId
+  pivotalStoryId PivotalStoryId
+  deriving Show
+
+PivotalUser
+  pivotalId Int
   deriving Show
 |]
+
