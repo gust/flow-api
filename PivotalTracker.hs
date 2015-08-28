@@ -5,14 +5,15 @@ import Control.Monad.Trans(lift)
 import Migrations
 import Control.Monad.Trans.Reader
 import Control.Lens((.~), (^.), (^?), (&), re)
+import Control.Monad.Trans(liftIO)
 import qualified Data.ByteString.Char8 as BCH
-import Control.Monad(liftM, (>=>))
+import Control.Monad(liftM, (>=>), liftM4)
 import System.Environment(getEnv)
 import Network.HTTP.Conduit(HttpException(StatusCodeException) )
 import Network.Wreq(FormParam( (:=) ), defaults, responseBody, header, Response)
 import Data.Aeson.Lens (_String, key, _Integer, _Array, _Value)
 import Data.Aeson(Value(..))
-import Data.Scientific(coefficient)
+import Data.Scientific(coefficient, Scientific(..))
 import qualified Network.HTTP.Types as NHT
 import qualified Data.Text as T
 import qualified Data.ByteString.Lazy as BL
@@ -47,16 +48,16 @@ updateLabelsOnStories label stories = mapM_ (updateLabels label) stories
 labelsUrl :: PivotalStory -> String
 labelsUrl story = concat ["https://www.pivotaltracker.com/services/v5/projects/", show (pivotalStoryProjectId story), "/stories/", (T.unpack $ pivotalStoryTrackerId story),  "/labels"]
 
-extractText :: Value -> BCH.ByteString
-extractText (String t) = BCH.pack $ T.unpack t
-extractText  _         = ""
+extractByteString :: Value -> BCH.ByteString
+extractByteString (String t) = BCH.pack $ T.unpack t
+extractByteString  _         = ""
 
 extractInteger :: Value -> Integer
 extractInteger (Number s) = coefficient s
 extractInteger _ = -1
 
 pivotalLabelsFromReponse :: Value -> Maybe PivotalLabel
-pivotalLabelsFromReponse (Object val) = PivotalLabel <$> (extractInteger <$> HMS.lookup "id" val) <*> (extractText <$> HMS.lookup "name" val)
+pivotalLabelsFromReponse (Object val) = PivotalLabel <$> (extractInteger <$> HMS.lookup "id" val) <*> (extractByteString <$> HMS.lookup "name" val)
 
 emptyBody = "" :: BCH.ByteString
 
@@ -93,17 +94,21 @@ pivotalStories storyIds = mapM getStory storyIds where
 logError :: World m => String -> m a
 logError = undefined
 
+formNumber :: Value -> Scientific
+formNumber (Number v) = v
+
 getStory :: World m => StoryId -> ReaderT Environment m (Maybe PivotalStory)
 getStory storyId = do
-  apiToken <- pivotalTrackerApiToken `liftM` ask 
+  apiToken <- pivotalTrackerApiToken `liftM` ask
   let options = pivotalApiOptions apiToken
   res <- lift $ tryRequest (getWith options $ "https://www.pivotaltracker.com/services/v5/stories/" ++ storyId)
   case res of
     (Right response) -> do
       let pivotalProjectId = response ^? responseBody . key "project_id"
-      case pivotalProjectId of
-        Just (Number projectId) -> return . Just $ PivotalStory (fromIntegral $ coefficient projectId) $ T.pack storyId
-        Nothing    -> return Nothing
+      let pivotalStoryName = response ^? responseBody . key "name" . _String
+      let pivotalStoryDescription = response ^? responseBody . key "description" . _String
+      let id = Just $ T.pack storyId
+      return $ liftM4 PivotalStory ((fromIntegral . coefficient . formNumber) <$> pivotalProjectId) id pivotalStoryName pivotalStoryDescription
     Left (StatusCodeException status headers _) -> do
       case NHT.statusCode status of
         403 -> return Nothing
@@ -159,4 +164,3 @@ labelStory label story = do
     let formBody = "name" := label
     lift $ tryRequest $ postWith requestOptions (labelsUrl story) formBody 
     return ()
-

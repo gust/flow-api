@@ -1,2 +1,1 @@
-app=production&git_log='we did some coding [#151512]'
 git_log="did some stuff [#95254230]"&app="zephyr-test"

@@ -42,6 +42,7 @@ executable flow-api
       , time
       , monad-logger
       , transformers
+      , conduit-extra
 
 
   -- hs-source-dirs:    

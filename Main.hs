@@ -4,6 +4,7 @@ import Migrations
 import qualified Web.Scotty as WS
 import Control.Monad.Trans
 import Control.Monad.State.Class
+import Data.Time.Clock(getCurrentTime)
 import TrackerTagging
 import PivotalTracker
 import Database.Persist
@@ -33,10 +34,14 @@ instance World IO where
   tryRequest = E.try
 
 
+
 labelStories :: World m => String -> Environment -> BL.ByteString -> m ()
 labelStories label environment gitLog = do 
   flip runReaderT environment $ do 
     (getStories gitLog) >>= (updateLabelsOnStories label)
+
+getReleaseStory :: ReleaseId -> PivotalStoryId -> ReleaseStory
+getReleaseStory releaseId storyId = ReleaseStory releaseId storyId
 
 type ReaderIO = ReaderT Environment IO ()
 runReaderIO :: Environment -> ReaderIO -> IO ()
@@ -54,12 +59,20 @@ main =  do
        let label = "deployed to " ++ (lazyByteStringToString app)
        liftIO $ labelStories label environment gitLog
        WS.html "<h1>success</h1>"
-    {- WS.post "/releases" $ do -}
-       {- gitLog <- WS.param "git_log" -}
-       {- app    <- WS.param "app" -}
-       {- let label = "deployed to " ++ (lazyByteStringToString app) -}
-       {- pivotalStories <- liftIO $ getStories gitLog -}
-       {- (liftIO $ updateLabelsOnStories label pivotalStories) >> WS.html "<h1>success</h1>" -}
-       {- runStdoutLoggingT $ withPostgresqlConn connStr $ \connection -> do -}
-          {- liftIO $ runSqlPersistM (insertMany pivotalStories) connection -}
-       {- return () -}
+    WS.post "/releases" $ do
+       gitLog <- WS.param "git_log"
+       app    <- WS.param "app"
+       let label = "deployed to " ++ (lazyByteStringToString app)
+       liftIO $ flip runReaderT environment $ do
+         pivotalStories <- getStories gitLog
+         updateLabelsOnStories label pivotalStories
+         -- Why does this compile? Doesn't runStdoutLoggingT return IO??
+         runStdoutLoggingT $ withPostgresqlConn connStr $ \connection -> do
+            liftIO $ flip runSqlPersistM connection $ do
+              pivotalIds <- insertMany pivotalStories
+              time <- liftIO getCurrentTime
+              releaseId <- insert $ Release time 
+              let releaseStories = map (getReleaseStory releaseId) pivotalIds
+              insertMany releaseStories
+
+       WS.html "Success!"

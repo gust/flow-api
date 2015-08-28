@@ -18,30 +18,19 @@ import Data.Time (UTCTime, getCurrentTime)
 
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
 Release
-  title T.Text
   createdAt UTCTime
-  deriving Show
-
-ReleaseAuthor
-  releaseId ReleaseId
-  userId UserId
   deriving Show
 
 ReleaseStory
   releaseId ReleaseId
   pivotalStoryId PivotalStoryId
-  commitSha T.Text
-  UniqueReleaseStoryCommit releaseId pivotalStoryId commitSha
+  UniqueReleaseStoryCommit releaseId pivotalStoryId
   deriving Show
 
 PivotalStory
   projectId Int
   trackerId T.Text
-  deriving Show
-
-User
-  firstName T.Text
-  lastName T.Text
+  name T.Text
+  description T.Text
   deriving Show
 |]
-
