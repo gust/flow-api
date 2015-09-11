@@ -8,6 +8,7 @@ import Control.Monad.Trans(MonadIO, liftIO)
 import Data.Time.Clock(getCurrentTime)
 import StringHelpers(lazyByteStringToString)
 import PivotalTracker.Story
+import Control.Applicative((<$>))
 import PivotalTracker.Label(updateLabelsOnStories)
 import Database.Persist
 import Control.Monad.Trans.Reader( ReaderT(..))
