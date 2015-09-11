@@ -13,7 +13,7 @@ import PivotalTracker.Label(updateLabelsOnStories)
 import Database.Persist
 import Control.Monad.Trans.Reader( ReaderT(..))
 import System.Environment(getEnv)
-import Control.Monad(liftM)
+import Control.Monad(liftM, liftM5)
 import Database.Persist.Postgresql
 import qualified Data.ByteString.Char8 as BCH
 import Control.Monad.Logger(runStdoutLoggingT)
@@ -22,9 +22,9 @@ import App.Environment
 import World
 
 
-connStr = "host=localhost dbname=flow_api user=gust port=5432"
+{- connStr = "host=localhost dbname=flow_api user=gust port=5432" -}
 
-runDbIO statement = runStdoutLoggingT $ withPostgresqlConn connStr $ \connection -> do
+runDbIO connStr statement = runStdoutLoggingT $ withPostgresqlConn connStr $ \connection -> do
           liftIO $ runSqlPersistM statement connection
 
 labelStories :: World m => String -> Environment -> BL.ByteString -> m ()
@@ -46,13 +46,18 @@ insertPivotalStory (PivotalStory story pivotalUsers) = do
 insertIfNew :: (MonadIO m, PersistEntityBackend val ~ backend, PersistEntity val, PersistUnique backend) => val -> ReaderT backend m (Entity val)
 insertIfNew = flip upsert []
 
+parsePostgresConnectionUrl :: String -> String -> String -> String -> String -> BCH.ByteString
+parsePostgresConnectionUrl host dbname user password port = BCH.pack $ "host=" ++ host ++ " dbname=" ++ dbname ++ " user=" ++ user ++ " password=" ++ password ++ " port=" ++ port
+
 type ReaderIO = ReaderT Environment IO ()
 runReaderIO :: Environment -> ReaderIO -> IO ()
 runReaderIO env r = runReaderT r env
 main :: IO ()
 main =  do
   apiToken <- BCH.pack `liftM` getEnv "PIVOTAL_TRACKER_API_TOKEN"
-  runDbIO $ runMigrationUnsafe DB.migrateAll
+  connectionString <- liftM5 parsePostgresConnectionUrl (getEnv "DATABASE_HOST") (getEnv "DATABASE_NAME") (getEnv "DATABASE_USER") (getEnv "DATABASE_PASSWORD") (getEnv "DATABASE_PORT")
+  let runDb = runDbIO connectionString
+  runDb (runMigrationUnsafe DB.migrateAll)
   port <- read `liftM` getEnv "PORT"
   let environment = Environment apiToken
   WS.scotty port $ do
@@ -70,7 +75,7 @@ main =  do
          stories <- getStories gitLog
          updateLabelsOnStories label $ map story stories
          -- Why does this compile? Doesn't runStdoutLoggingT return IO??
-         liftIO $ runDbIO $ do
+         liftIO $ runDb $ do
            pivotalStoryIds <- mapM insertPivotalStory stories
            time <- liftIO getCurrentTime
            releaseId <- insert $ DB.Release time
