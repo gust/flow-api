@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings    #-}
+{-# LANGUAGE FlexibleContexts    #-}
 
 import Schema
 import qualified Web.Scotty as WS
@@ -23,9 +24,6 @@ connStr = "host=localhost dbname=flow_api user=gust port=5432"
 
 runDbIO statement = runStdoutLoggingT $ withPostgresqlConn connStr $ \connection -> do
           liftIO $ runSqlPersistM statement connection
-
-
-
 
 labelStories :: World m => String -> Environment -> BL.ByteString -> m ()
 labelStories label environment gitLog = do 

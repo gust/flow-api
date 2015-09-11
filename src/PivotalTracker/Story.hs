@@ -5,9 +5,9 @@ import World
 import Control.Monad.Trans(lift)
 import Schema
 import Control.Monad.Trans.Reader
-import Control.Lens((.~), (^.), (^?), (&), re)
+import Control.Lens((.~), (^.), (^?), (&), re, traverse)
 import Control.Monad.Trans(liftIO)
-import Control.Monad(liftM, (>=>), liftM4)
+import Control.Monad(liftM, (>=>), liftM4, join)
 import System.Environment(getEnv)
 import Network.HTTP.Conduit(HttpException(StatusCodeException) )
 import Network.Wreq(FormParam( (:=) ), defaults, responseBody, header)
@@ -52,6 +52,13 @@ logError = undefined
 formNumber :: Value -> Scientific
 formNumber (Number v) = v
 
+extractInteger :: Value -> Integer
+extractInteger (Number s) = coefficient s
+extractInteger _ = undefined
+
+extractPivotalUsers :: V.Vector Value ->  Maybe [PivotalUser]
+extractPivotalUsers v =  Just $ fmap (PivotalUser . fromIntegral . extractInteger) (V.toList v) 
+
 getStory :: World m => StoryId -> ReaderT Environment m (Maybe PivotalStory)
 getStory storyId = do
   apiToken <- pivotalTrackerApiToken `liftM` ask
@@ -64,12 +71,15 @@ getStory storyId = do
       let pivotalStoryDescription = response ^? responseBody . key "description" . _String
       let pivotalStoryKind = response ^? responseBody . key "kind" . _String
       let id = Just $ T.pack storyId
-      let convertedProjectId = (fromIntegral . coefficient . formNumber) <$> pivotalProjectId
+      let convertedProjectId = (fromIntegral . extractInteger) <$> pivotalProjectId
       let requestedById = fromIntegral <$> response ^? responseBody . key "requested_by_id" . _Integer
       let storyType = response ^? responseBody . key "story_type" . _String
       let storyUrl = response ^? responseBody . key "url" . _String
-      let owners = response ^? responseBody . key "owner_ids" . _Array 
-      return $ PivotalStory <$> convertedProjectId <*> id <*> pivotalStoryName <*> pivotalStoryDescription <*> pivotalStoryKind <*> requestedById <*> storyType <*> storyUrl <*> owners
+      let owners = extractPivotalUsers $ response ^. responseBody . key "owner_ids" . _Array
+      return $ PivotalStory <$> 
+        convertedProjectId <*> id <*> pivotalStoryName <*> 
+        pivotalStoryDescription <*> pivotalStoryKind <*> requestedById <*> 
+        storyType <*> storyUrl <*> owners
     Left (StatusCodeException status headers _) -> do
       case NHT.statusCode status of
         403 -> return Nothing
