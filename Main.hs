@@ -1,11 +1,12 @@
 {-# LANGUAGE OverloadedStrings    #-}
 
-import Migrations
+import Schema
 import qualified Web.Scotty as WS
 import Control.Monad.Trans(liftIO)
 import Data.Time.Clock(getCurrentTime)
-import TrackerTagging
-import PivotalTracker
+import StringHelpers(lazyByteStringToString)
+import PivotalTracker.Story
+import PivotalTracker.Label(updateLabelsOnStories)
 import Database.Persist
 import Control.Monad.Trans.Reader( ReaderT(..))
 import System.Environment(getEnv)
@@ -15,7 +16,6 @@ import qualified Data.ByteString.Char8 as BCH
 import Control.Monad.Logger(runStdoutLoggingT)
 import qualified Data.ByteString.Lazy as BL
 import App.Environment
-import Label(updateLabelsOnStories)
 import World
 
 

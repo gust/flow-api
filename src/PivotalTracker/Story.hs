@@ -1,13 +1,12 @@
 {-# LANGUAGE OverloadedStrings    #-}
 
-module PivotalTracker(getStories, lazyByteStringToString) where
+module PivotalTracker.Story(getStories) where
 import World
 import Control.Monad.Trans(lift)
-import Migrations
+import Schema
 import Control.Monad.Trans.Reader
 import Control.Lens((.~), (^.), (^?), (&), re)
 import Control.Monad.Trans(liftIO)
-import qualified Data.ByteString.Char8 as BCH
 import Control.Monad(liftM, (>=>), liftM4)
 import System.Environment(getEnv)
 import Network.HTTP.Conduit(HttpException(StatusCodeException) )
@@ -18,6 +17,7 @@ import Data.Scientific(coefficient, Scientific(..))
 import qualified Network.HTTP.Types as NHT
 import qualified Data.Text as T
 import qualified Data.ByteString.Lazy as BL
+import StringHelpers(lazyByteStringToString)
 import Control.Applicative((<$>), (<*>))
 import qualified Data.List as DL
 import qualified Data.Maybe as MB
@@ -45,7 +45,6 @@ pivotalStories storyIds = mapM getStory storyIds where
 
 pivotalApiOptions token = defaults & header "X-TrackerToken" .~ [token]
 
-lazyByteStringToString = BCH.unpack . BL.toStrict
 
 logError :: World m => String -> m a
 logError = undefined

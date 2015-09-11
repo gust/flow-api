@@ -20,7 +20,7 @@ executable flow-api
   -- other-modules:     
   -- other-extensions:  
   build-depends:     
-      base >=4.7 && <4.8
+      base >=4.7 && < 5.0
       , scotty
       , regex-compat
       , text
@@ -45,5 +45,5 @@ executable flow-api
       , conduit-extra
 
 
-  -- hs-source-dirs:    
+  hs-source-dirs: src/, ./
   default-language:    Haskell2010

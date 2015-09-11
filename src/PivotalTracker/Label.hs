@@ -1,8 +1,8 @@
 {-# LANGUAGE OverloadedStrings    #-}
-module Label(updateLabelsOnStories) where
+module PivotalTracker.Label(updateLabelsOnStories) where
   import Control.Monad.Trans(lift)
   import World
-  import Migrations
+  import Schema
   import Control.Monad.Trans.Reader
   import Control.Lens((.~), (^.), (^?), (&), re)
   import qualified Data.ByteString.Char8 as BCH
@@ -20,6 +20,8 @@ module Label(updateLabelsOnStories) where
   import qualified Network.Wreq as NW
   import qualified Network.Wreq.Types as NWT
 
+  updateLabelsOnStories :: World m => String -> [PivotalStory] -> ReaderT Environment m ()
+  updateLabelsOnStories label stories = mapM_ (updateLabels label) stories
 
   data PivotalLabel = PivotalLabel { labelId :: Integer, labelText :: BCH.ByteString  } deriving Show
   type Label = String
@@ -96,10 +98,6 @@ module Label(updateLabelsOnStories) where
 
   pivotalLabelsFromReponse :: Value -> Maybe PivotalLabel
   pivotalLabelsFromReponse (Object val) = PivotalLabel <$> (extractInteger <$> HMS.lookup "id" val) <*> (extractByteString <$> HMS.lookup "name" val)
-
-  updateLabelsOnStories :: World m => String -> [PivotalStory] -> ReaderT Environment m ()
-  updateLabelsOnStories label stories = mapM_ (updateLabels label) stories
-
 
   labelsUrl :: PivotalStory -> String
   labelsUrl story = concat ["https://www.pivotaltracker.com/services/v5/projects/", show (pivotalStoryProjectId story), "/stories/", (T.unpack $ pivotalStoryTrackerId story),  "/labels"]

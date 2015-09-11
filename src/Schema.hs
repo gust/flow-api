@@ -11,7 +11,7 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
-module Migrations where
+module Schema where
 import Database.Persist.TH
 import qualified Data.Text as T
 import Data.Time (UTCTime, getCurrentTime)
