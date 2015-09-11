@@ -1,9 +1,9 @@
 {-# LANGUAGE OverloadedStrings    #-}
 
-module PivotalTracker.Story(getStories) where
+module PivotalTracker.Story(getStories, PivotalStory(..)) where
 import World
 import Control.Monad.Trans(lift)
-import Schema
+import qualified Schema as DB
 import Control.Monad.Trans.Reader
 import Control.Lens((.~), (^.), (^?), (&), re, traverse)
 import Control.Monad.Trans(liftIO)
@@ -31,6 +31,8 @@ import qualified Network.Wreq.Types as NWT
 type StoryId = String
 type CommitMessage = String
 
+data PivotalStory = PivotalStory  { story :: DB.PivotalStory, owners :: [DB.PivotalUser] }
+
 getStories :: World m => BL.ByteString -> ReaderT Environment m [PivotalStory]
 getStories gitLog =  liftM MB.catMaybes $ pivotalStories . storyIdsFromCommits $ lines (lazyByteStringToString gitLog)
 
@@ -56,8 +58,8 @@ extractInteger :: Value -> Integer
 extractInteger (Number s) = coefficient s
 extractInteger _ = undefined
 
-extractPivotalUsers :: V.Vector Value ->  Maybe [PivotalUser]
-extractPivotalUsers v =  Just $ fmap (PivotalUser . fromIntegral . extractInteger) (V.toList v) 
+extractPivotalUsers :: V.Vector Value ->  Maybe [DB.PivotalUser]
+extractPivotalUsers v =  Just $ fmap (DB.PivotalUser . fromIntegral . extractInteger) (V.toList v)
 
 getStory :: World m => StoryId -> ReaderT Environment m (Maybe PivotalStory)
 getStory storyId = do
@@ -76,10 +78,10 @@ getStory storyId = do
       let storyType = response ^? responseBody . key "story_type" . _String
       let storyUrl = response ^? responseBody . key "url" . _String
       let owners = extractPivotalUsers $ response ^. responseBody . key "owner_ids" . _Array
-      return $ PivotalStory <$> 
-        convertedProjectId <*> id <*> pivotalStoryName <*> 
-        pivotalStoryDescription <*> pivotalStoryKind <*> requestedById <*> 
-        storyType <*> storyUrl <*> owners
+      let currentState = response ^? responseBody . key "current_state" . _String
+      let estimate = response ^? responseBody . key "estimate"  . _Integer
+      let storyFromJSON = DB.PivotalStory <$> currentState <*> (fromIntegral <$> estimate) <*> convertedProjectId <*> id <*> pivotalStoryName <*> pivotalStoryDescription <*> pivotalStoryKind <*> requestedById <*> storyType <*> storyUrl
+      return $ PivotalStory <$> storyFromJSON <*> owners
     Left (StatusCodeException status headers _) -> do
       case NHT.statusCode status of
         403 -> return Nothing

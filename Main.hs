@@ -1,9 +1,10 @@
 {-# LANGUAGE OverloadedStrings    #-}
 {-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE GADTs    #-}
 
-import Schema
+import qualified Schema as DB
 import qualified Web.Scotty as WS
-import Control.Monad.Trans(liftIO)
+import Control.Monad.Trans(MonadIO, liftIO)
 import Data.Time.Clock(getCurrentTime)
 import StringHelpers(lazyByteStringToString)
 import PivotalTracker.Story
@@ -28,10 +29,21 @@ runDbIO statement = runStdoutLoggingT $ withPostgresqlConn connStr $ \connection
 labelStories :: World m => String -> Environment -> BL.ByteString -> m ()
 labelStories label environment gitLog = do 
   flip runReaderT environment $ do 
-    (getStories gitLog) >>= (updateLabelsOnStories label)
+    stories <- (fmap story) `liftM` getStories gitLog
+    updateLabelsOnStories label stories
 
-getReleaseStory :: ReleaseId -> PivotalStoryId -> ReleaseStory
-getReleaseStory releaseId storyId = ReleaseStory releaseId storyId
+getReleaseStory :: DB.ReleaseId -> DB.PivotalStoryId -> DB.ReleaseStory
+getReleaseStory releaseId storyId = DB.ReleaseStory releaseId storyId
+
+insertPivotalStory (PivotalStory story pivotalUsers) = do 
+  pivotalUsers <- mapM insertIfNew pivotalUsers
+  let ownerIds = fmap entityKey pivotalUsers
+  storyId <- entityKey <$> insertIfNew story
+  pivotalStoryOwnerIds <- mapM insertIfNew $ map (flip DB.PivotalStoryOwner storyId) ownerIds
+  return storyId
+
+insertIfNew :: (MonadIO m, PersistEntityBackend val ~ backend, PersistEntity val, PersistUnique backend) => val -> ReaderT backend m (Entity val)
+insertIfNew = flip upsert []
 
 type ReaderIO = ReaderT Environment IO ()
 runReaderIO :: Environment -> ReaderIO -> IO ()
@@ -39,7 +51,7 @@ runReaderIO env r = runReaderT r env
 main :: IO ()
 main =  do
   apiToken <- BCH.pack `liftM` getEnv "PIVOTAL_TRACKER_API_TOKEN"
-  runDbIO $ runMigrationUnsafe migrateAll
+  runDbIO $ runMigrationUnsafe DB.migrateAll
   port <- read `liftM` getEnv "PORT"
   let environment = Environment apiToken
   WS.scotty port $ do
@@ -54,13 +66,13 @@ main =  do
        app    <- WS.param "app"
        let label = "deployed to " ++ (lazyByteStringToString app)
        liftIO $ flip runReaderT environment $ do
-         pivotalStories <- getStories gitLog
-         updateLabelsOnStories label pivotalStories
+         stories <- getStories gitLog
+         updateLabelsOnStories label $ map story stories
          -- Why does this compile? Doesn't runStdoutLoggingT return IO??
-         runDbIO $ do
-           pivotalIds <- insertMany pivotalStories
+         liftIO $ runDbIO $ do
+           pivotalStoryIds <- mapM insertPivotalStory stories
            time <- liftIO getCurrentTime
-           releaseId <- insert $ Release time 
-           let releaseStories = map (getReleaseStory releaseId) pivotalIds
-           insertMany releaseStories
+           releaseId <- insert $ DB.Release time
+           let releaseStories = map (getReleaseStory releaseId) pivotalStoryIds
+           mapM_ insertIfNew releaseStories
        WS.html "Success!"

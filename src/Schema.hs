@@ -28,24 +28,31 @@ ReleaseStory
   deriving Show
 
 PivotalStory
+  currentState T.Text
+  estimate Int
   projectId Int
   trackerId T.Text
   name T.Text
   description T.Text
   kind T.Text
-  requested_by_id Int
-  story_type T.Text
+  requestedById Int
+  storyType T.Text
   url T.Text
-  owners [PivotalUser]
+  UniquePivotalStory trackerId
   deriving Show
 
 PivotalStoryOwner
   pivotalUserId PivotalUserId
   pivotalStoryId PivotalStoryId
+  UniqueStoryOwner pivotalUserId pivotalStoryId
   deriving Show
 
 PivotalUser
   pivotalId Int
+  UniqueUserId pivotalId
   deriving Show
 |]
+
+
+
 
