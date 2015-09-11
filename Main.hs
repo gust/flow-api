@@ -2,27 +2,24 @@
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE GADTs    #-}
 
+import App.Environment
+import Control.Applicative((<$>))
+import Control.Monad(liftM, liftM5)
+import Control.Monad.Logger(runStdoutLoggingT)
+import Control.Monad.Trans(MonadIO, liftIO)
+import Control.Monad.Trans.Reader( ReaderT(..))
+import Data.Time.Clock(getCurrentTime)
+import Database.Persist
+import Database.Persist.Postgresql
+import PivotalTracker.Label(updateLabelsOnStories)
+import PivotalTracker.Story
+import StringHelpers(lazyByteStringToString)
+import System.Environment(getEnv)
+import World
+import qualified Data.ByteString.Char8 as BCH
+import qualified Data.ByteString.Lazy as BL
 import qualified Schema as DB
 import qualified Web.Scotty as WS
-import Control.Monad.Trans(MonadIO, liftIO)
-import Data.Time.Clock(getCurrentTime)
-import StringHelpers(lazyByteStringToString)
-import PivotalTracker.Story
-import Control.Applicative((<$>))
-import PivotalTracker.Label(updateLabelsOnStories)
-import Database.Persist
-import Control.Monad.Trans.Reader( ReaderT(..))
-import System.Environment(getEnv)
-import Control.Monad(liftM, liftM5)
-import Database.Persist.Postgresql
-import qualified Data.ByteString.Char8 as BCH
-import Control.Monad.Logger(runStdoutLoggingT)
-import qualified Data.ByteString.Lazy as BL
-import App.Environment
-import World
-
-
-{- connStr = "host=localhost dbname=flow_api user=gust port=5432" -}
 
 runDbIO connStr statement = runStdoutLoggingT $ withPostgresqlConn connStr $ \connection -> do
           liftIO $ runSqlPersistM statement connection

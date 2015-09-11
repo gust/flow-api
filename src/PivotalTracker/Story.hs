@@ -1,34 +1,36 @@
 {-# LANGUAGE OverloadedStrings    #-}
 
 module PivotalTracker.Story(getStories, PivotalStory(..)) where
-import World
-import Control.Monad.Trans(lift)
-import qualified Schema as DB
-import Control.Monad.Trans.Reader
+
+import App.Environment
+import Control.Applicative((<$>), (<*>))
 import Control.Lens((.~), (^.), (^?), (&), re, traverse)
-import Control.Monad.Trans(liftIO)
 import Control.Monad(liftM, (>=>), liftM4, join)
-import System.Environment(getEnv)
+import Control.Monad.Trans(lift)
+import Control.Monad.Trans(liftIO)
+import Control.Monad.Trans.Reader
+import Data.Aeson(Value(..))
+import Data.Aeson.Lens (_String, key, _Integer, _Array, _Value)
+import Data.Scientific(coefficient, Scientific(..))
 import Network.HTTP.Conduit(HttpException(StatusCodeException) )
 import Network.Wreq(FormParam( (:=) ), defaults, responseBody, header)
-import Data.Aeson.Lens (_String, key, _Integer, _Array, _Value)
-import Data.Aeson(Value(..))
-import Data.Scientific(coefficient, Scientific(..))
-import qualified Network.HTTP.Types as NHT
-import qualified Data.Text as T
-import qualified Data.ByteString.Lazy as BL
+import PivotalTracker.Api(getStory)
 import StringHelpers(lazyByteStringToString)
-import Control.Applicative((<$>), (<*>))
+import System.Environment(getEnv)
+import PivotalTracker.Types(StoryId)
+import World
+import qualified Data.ByteString.Lazy as BL
+import qualified Data.HashMap.Strict as HMS
 import qualified Data.List as DL
 import qualified Data.Maybe as MB
-import qualified Data.HashMap.Strict as HMS
-import qualified Text.Regex as TR
+import qualified Data.Text as T
 import qualified Data.Vector as V
-import App.Environment
+import qualified Network.HTTP.Types as NHT
 import qualified Network.Wreq as NW
 import qualified Network.Wreq.Types as NWT
+import qualified Schema as DB
+import qualified Text.Regex as TR
 
-type StoryId = String
 type CommitMessage = String
 
 data PivotalStory = PivotalStory  { story :: DB.PivotalStory, owners :: [DB.PivotalUser] }
@@ -61,31 +63,8 @@ extractInteger _ = undefined
 extractPivotalUsers :: V.Vector Value ->  Maybe [DB.PivotalUser]
 extractPivotalUsers v =  Just $ fmap (DB.PivotalUser . fromIntegral . extractInteger) (V.toList v)
 
-getStory :: World m => StoryId -> ReaderT Environment m (Maybe PivotalStory)
-getStory storyId = do
-  apiToken <- pivotalTrackerApiToken `liftM` ask
-  let options = pivotalApiOptions apiToken
-  res <- lift $ tryRequest (getWith options $ "https://www.pivotaltracker.com/services/v5/stories/" ++ storyId)
-  case res of
-    (Right response) -> do
-      let pivotalProjectId = response ^? responseBody . key "project_id"
-      let pivotalStoryName = response ^? responseBody . key "name" . _String
-      let pivotalStoryDescription = response ^? responseBody . key "description" . _String
-      let pivotalStoryKind = response ^? responseBody . key "kind" . _String
-      let id = Just $ T.pack storyId
-      let convertedProjectId = (fromIntegral . extractInteger) <$> pivotalProjectId
-      let requestedById = fromIntegral <$> response ^? responseBody . key "requested_by_id" . _Integer
-      let storyType = response ^? responseBody . key "story_type" . _String
-      let storyUrl = response ^? responseBody . key "url" . _String
-      let owners = extractPivotalUsers $ response ^. responseBody . key "owner_ids" . _Array
-      let currentState = response ^? responseBody . key "current_state" . _String
-      let estimate = response ^? responseBody . key "estimate"  . _Integer
-      let storyFromJSON = DB.PivotalStory <$> currentState <*> (fromIntegral <$> estimate) <*> convertedProjectId <*> id <*> pivotalStoryName <*> pivotalStoryDescription <*> pivotalStoryKind <*> requestedById <*> storyType <*> storyUrl
-      return $ PivotalStory <$> storyFromJSON <*> owners
-    Left (StatusCodeException status headers _) -> do
-      case NHT.statusCode status of
-        403 -> return Nothing
-        404 -> return Nothing
-        _   -> do
-          lift . logError $ "Could not process request for story: " ++ storyId ++ " defaulting to not accepted"
-          return Nothing
+type PivotalApiResponse = NW.Response
+
+pivotalStoryFromResponse :: PivotalApiResponse a -> Maybe PivotalStory
+pivotalStoryFromResponse = undefined
+
