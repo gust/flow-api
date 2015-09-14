@@ -64,6 +64,8 @@ main =  do
     WS.post "/" $ do
        gitLog <- WS.param "git_log"
        app    <- WS.param "app"
+       liftIO $ BL.putStrLn gitLog
+       liftIO $ BL.putStrLn app
        let label = "deployed to " ++ (lazyByteStringToString app)
        liftIO $ labelStories label environment gitLog
        WS.html "<h1>success</h1>"
