@@ -44,6 +44,7 @@ executable flow-api
       , transformers
       , transformers-base
       , conduit-extra
+      , wai-extra
 
 
   hs-source-dirs: src/ ./ App/

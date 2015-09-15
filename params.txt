@@ -1,1 +1,1 @@
-git_log="did some stuff [#95254230]"&app="zephyr-hello"
+git_log="did some stuff [#95254230]\n did more stuf[#95249680]"&app="zephyr-hello"

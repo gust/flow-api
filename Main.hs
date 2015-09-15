@@ -3,6 +3,7 @@
 {-# LANGUAGE GADTs    #-}
 
 import qualified Schema as DB
+import Network.Wai.Middleware.RequestLogger(logStdout)
 import qualified Web.Scotty as WS
 import Control.Monad.Trans(MonadIO, liftIO)
 import Data.Time.Clock(getCurrentTime)
@@ -28,8 +29,8 @@ runDbIO connStr statement = runStdoutLoggingT $ withPostgresqlConn connStr $ \co
           liftIO $ runSqlPersistM statement connection
 
 labelStories :: World m => String -> Environment -> BL.ByteString -> m ()
-labelStories label environment gitLog = do 
-  flip runReaderT environment $ do 
+labelStories label environment gitLog = do
+  flip runReaderT environment $ do
     stories <- (fmap story) `liftM` getStories gitLog
     updateLabelsOnStories label stories
 
@@ -61,6 +62,8 @@ main =  do
   port <- read `liftM` getEnv "PORT"
   let environment = Environment apiToken
   WS.scotty port $ do
+    WS.middleware logStdout
+
     WS.post "/" $ do
        gitLog <- WS.param "git_log"
        app    <- WS.param "app"
