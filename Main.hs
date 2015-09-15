@@ -8,6 +8,8 @@ import qualified Web.Scotty as WS
 import Control.Monad.Trans(MonadIO, liftIO)
 import Data.Time.Clock(getCurrentTime)
 import StringHelpers(lazyByteStringToString)
+import Data.Monoid(mconcat)
+import qualified Data.Text.Lazy as T
 import PivotalTracker.Story
 import Control.Applicative((<$>))
 import PivotalTracker.Label(updateLabelsOnStories)
@@ -71,7 +73,7 @@ main =  do
        liftIO $ BL.putStrLn app
        let label = "deployed to " ++ (lazyByteStringToString app)
        liftIO $ labelStories label environment gitLog
-       WS.html "<h1>success</h1>"
+       WS.html . mconcat $ ["<h1>" , (T.pack $ lazyByteStringToString gitLog) , " </h1>" , "<h2>" , (T.pack $ lazyByteStringToString app) , "</h2>"]
     WS.post "/releases" $ do
        gitLog <- WS.param "git_log"
        app    <- WS.param "app"
