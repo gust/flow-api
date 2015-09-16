@@ -87,5 +87,5 @@ getStory storyId = do
         403 -> return Nothing
         404 -> return Nothing
         _   -> do
-          lift . logError $ "Could not process request for story: " ++ storyId ++ " defaulting to not accepted"
+          {- lift . logError $ "Could not process request for story: " ++ storyId ++ " defaulting to not accepted" -}
           return Nothing
