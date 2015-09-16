@@ -1,1 +1,1 @@
-git_log="did some stuff [#95254230]\n did more stuf[#95249680]"&app="zephyr-hello"
+app=secure-woodland-9775&user=example.example.com&url=http://secure-woodland-9775.herokuapp.com&head=4f20bdd&head_long=4f20bdd&prev_head=&git_log=did some stuff [#95254230]\n did more stuf[#95249680]&release=v7
