@@ -19,6 +19,7 @@ import Data.Time (UTCTime, getCurrentTime)
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
 Release
   createdAt UTCTime
+  gitLog T.Text Maybe
   deriving Show
 
 ReleaseStory

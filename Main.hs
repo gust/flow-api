@@ -12,6 +12,7 @@ import Data.Monoid(mconcat)
 import qualified Data.Text.Lazy as T
 import PivotalTracker.Story
 import Control.Applicative((<$>))
+import qualified Data.Text.Lazy as LT
 import PivotalTracker.Label(updateLabelsOnStories)
 import Database.Persist
 import Control.Monad.Trans.Reader( ReaderT(..))
@@ -85,7 +86,7 @@ main =  do
          liftIO $ runDb $ do
            pivotalStoryIds <- mapM insertPivotalStory stories
            time <- liftIO getCurrentTime
-           releaseId <- insert $ DB.Release time
+           releaseId <- insert $ DB.Release time (Just . LT.toStrict . LT.pack $ lazyByteStringToString gitLog)
            let releaseStories = map (getReleaseStory releaseId) pivotalStoryIds
            mapM_ insertIfNew releaseStories
        WS.html "Success!"
