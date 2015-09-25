@@ -67,7 +67,7 @@ main =  do
   WS.scotty port $ do
     WS.middleware logStdout
 
-    WS.post "/" $ do
+    WS.post "/deploys" $ do
        gitLog <- WS.param "git_log"
        app    <- WS.param "app"
        liftIO $ BL.putStrLn gitLog
