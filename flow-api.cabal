@@ -30,7 +30,7 @@ executable flow-api
       , lens
       , http-conduit
       , http-types
-      , aeson
+      , aeson >= 0.9.0 && < 0.11.0
       , scientific
       , mtl
       , vector
@@ -45,6 +45,9 @@ executable flow-api
       , transformers-base
       , conduit-extra
       , wai-extra
+      , wai-middleware-static
+      , esqueleto >= 2.4.0 && < 2.4.3
+      , monad-control
 
 
   hs-source-dirs: src/ ./ App/
