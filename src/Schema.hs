@@ -55,7 +55,3 @@ PivotalUser
   UniqueUserId pivotalId
   deriving Show Generic
 |]
-
-
-
-

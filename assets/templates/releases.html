@@ -1,24 +1,19 @@
 <h1> Gust Releases </h1>
-<section ng-repeat="release in releaseCtrl.releases">
-  <h2> Released At {{ release[0].releaseCreatedAt | date:'dd/MM/yy hh:mm' }} </h2>
-  <table>
-    <th>
-      <td> Story Type </td>
-      <td> Story Title </td>
-      <td> Developer(s) </td>
-    </th>
-    <tr ng-repeat="story in release.stories">
-      <td>
-         {{ story.type }}
-      </td>
-
-      <td>
-         {{ story.title }}
-      </td>
-
-      <td>
-         {{ story.owners.join(", ") }}
-      </td>
-    </tr>
-  </table>
-</section>
+<div class="col-md-6" >
+  <section ng-repeat="releaseData in releaseCtrl.releases">
+    <h3> Released {{ releaseData.release.releaseCreatedAt | date:"MMMM d, yy 'at' hh:mm a" }} </h3>
+    <ul class="list-group">
+      <li class="list-group-item" ng-repeat="storyData in releaseData.pivotalStories" >
+        <a target="_blank" href="{{ storyData.story.pivotalStoryUrl  }}"> {{ storyData.story.pivotalStoryName }} </a>
+        <storyTypeLabel storyType='{{ storyData.story.pivotalStoryStoryType }} '>
+        </storyTypeLabel>
+        <a href="#" style="padding-right: 20px;" ng-click="isCollapsed = !isCollapsed" class="pull-right"> View Description </a>
+        <div collapse="isCollapsed" ng-init="isCollapsed=true">
+          <pre>
+            {{ storyData.story.pivotalStoryDescription }}
+          </pre>
+        </div>
+      </li>
+    </ul>
+  </section>
+</div>

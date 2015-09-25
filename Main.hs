@@ -72,9 +72,12 @@ releaseDataFromSqlEntities xs = groupReleases $ fmap extractEntityValues xs
   where extractEntityValues (a, b, c, d, e) = (entityVal a, entityVal b, entityVal c, entityVal d, entityVal e)
 
 getReleases ::  (MonadBaseControl IO m, MonadLogger m, MonadIO m) =>  SqlPersistT m [ReleaseData]
-getReleases  = fmap releaseDataFromSqlEntities $ E.select $ E.from return
-
-
+getReleases  = fmap releaseDataFromSqlEntities $ E.select $ E.from $ \(release `E.InnerJoin` releaseStory `E.InnerJoin`  pivotalStory `E.InnerJoin`  pivotalStoryOwner `E.InnerJoin` pivotalUser) -> do 
+                  E.on(pivotalStoryOwner ^.  DB.PivotalStoryOwnerPivotalUserId E.==. pivotalUser ^. DB.PivotalUserId)
+                  E.on(pivotalStoryOwner ^.  DB.PivotalStoryOwnerPivotalStoryId E.==. pivotalStory ^. DB.PivotalStoryId)
+                  E.on(releaseStory ^.  DB.ReleaseStoryPivotalStoryId E.==. pivotalStory ^. DB.PivotalStoryId)
+                  E.on(release ^. DB.ReleaseId E.==. releaseStory ^. DB.ReleaseStoryReleaseId)
+                  return(release, releaseStory, pivotalStory, pivotalStoryOwner, pivotalUser)
 
 data ReleaseData = ReleaseData { pivotalStories :: [PivotalStory], release :: DB.Release } deriving Generic
 instance Eq ReleaseData where
