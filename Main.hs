@@ -1,13 +1,17 @@
 {-# LANGUAGE OverloadedStrings    #-}
 {-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE GADTs    #-}
 
 import qualified Schema as DB
 import Network.Wai.Middleware.RequestLogger(logStdout)
+import GHC.Generics(Generic)
+import Data.List(find)
 import qualified Web.Scotty as WS
 import           Control.Monad.Trans.Control(MonadBaseControl)
 import Control.Monad.Trans(MonadIO, liftIO)
 import qualified Data.Aeson as DA
+import qualified Control.Monad.State.Lazy as MS
 import qualified Database.Esqueleto      as E
 import           Database.Esqueleto      ((^.))
 import Data.Time.Clock(getCurrentTime)
@@ -18,6 +22,7 @@ import qualified Data.Text.Lazy as T
 import PivotalTracker.Story
 import Control.Applicative((<$>))
 import qualified Data.Text.Lazy as LT
+import Control.Monad(forM)
 import PivotalTracker.Label(updateLabelsOnStories)
 import Database.Persist
 import Control.Monad.Trans.Reader( ReaderT(..))
@@ -59,16 +64,49 @@ insertIfNew = flip upsert []
 parsePostgresConnectionUrl :: String -> String -> String -> String -> String -> BCH.ByteString
 parsePostgresConnectionUrl host dbname user password port = BCH.pack $ "host=" ++ host ++ " dbname=" ++ dbname ++ " user=" ++ user ++ " password=" ++ password ++ " port=" ++ port
 
+doubleFmap f = fmap (fmap f)
 type ReaderIO = ReaderT Environment IO ()
-getReleases ::  (MonadBaseControl IO m, MonadLogger m, MonadIO m) =>  SqlPersistT m [(DB.Release, DB.ReleaseStory)]
-getReleases  = fmap (fmap (\(x, y) -> (entityVal x, entityVal y) )) $ E.select $ E.from $ \(E.InnerJoin release releaseStory) -> do
-                      E.on $ release ^. DB.ReleaseId E.==. releaseStory ^. DB.ReleaseStoryReleaseId
-                      return (release, releaseStory)
+
+releaseDataFromSqlEntities :: [(Entity DB.Release, Entity DB.ReleaseStory, Entity DB.PivotalStory, Entity DB.PivotalStoryOwner, Entity DB.PivotalUser) ] -> [ReleaseData]
+releaseDataFromSqlEntities xs = groupReleases $ fmap extractEntityValues xs
+  where extractEntityValues (a, b, c, d, e) = (entityVal a, entityVal b, entityVal c, entityVal d, entityVal e)
+
+getReleases ::  (MonadBaseControl IO m, MonadLogger m, MonadIO m) =>  SqlPersistT m [ReleaseData]
+getReleases  = fmap releaseDataFromSqlEntities $ E.select $ E.from return
 
 
+
+data ReleaseData = ReleaseData { pivotalStories :: [PivotalStory], release :: DB.Release } deriving Generic
+instance Eq ReleaseData where
+
+instance DA.ToJSON ReleaseData
 
 instance DA.ToJSON DB.Release
-instance DA.ToJSON DB.ReleaseStory
+instance DA.ToJSON DB.PivotalStory
+instance DA.ToJSON PivotalStory
+instance DA.ToJSON DB.PivotalUser
+
+groupReleases :: [(DB.Release, DB.ReleaseStory, DB.PivotalStory, DB.PivotalStoryOwner, DB.PivotalUser)] -> [ReleaseData]
+groupReleases xs = flip MS.execState [] $ forM xs $ \releaseData@(release, _, st, _, user) -> do
+                     releases <- MS.get
+                     case findRelease release releases of
+                        Just existingRelease  -> MS.put ((updateReleaseData existingRelease releaseData) : releases)
+                        Nothing               -> MS.put ((newRelease releaseData) : releases)
+  where
+    updateReleaseData :: ReleaseData -> (DB.Release, DB.ReleaseStory, DB.PivotalStory, DB.PivotalStoryOwner, DB.PivotalUser) -> ReleaseData
+    updateReleaseData releaseData (release, _, st, _, user) = ReleaseData (addStory releaseData st user) release
+      where
+        addStory :: ReleaseData -> DB.PivotalStory -> DB.PivotalUser -> [PivotalStory]
+        addStory (ReleaseData stories _) st user = case find (\x -> (DB.pivotalStoryUrl $ story x) == (DB.pivotalStoryUrl st)) stories  of
+                                                      Just existingStory ->  stories
+                                                      Nothing             -> (PivotalStory st [user]) : stories
+
+    newRelease :: (DB.Release, DB.ReleaseStory, DB.PivotalStory, DB.PivotalStoryOwner, DB.PivotalUser) -> ReleaseData
+    newRelease (release, _, story, _, user) = ReleaseData [PivotalStory story [user]] release
+    findRelease :: DB.Release -> [ReleaseData] -> Maybe ReleaseData
+    findRelease r1 releases = flip find releases $ \releaseData -> do
+                      DB.releaseCreatedAt (release releaseData) == DB.releaseCreatedAt r1
+
 
 runReaderIO :: Environment -> ReaderIO -> IO ()
 runReaderIO env r = runReaderT r env

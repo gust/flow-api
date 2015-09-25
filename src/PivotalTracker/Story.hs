@@ -1,8 +1,10 @@
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings    #-}
 
 module PivotalTracker.Story(getStories, PivotalStory(..)) where
 import World
 import Control.Monad.Trans(lift)
+import GHC.Generics(Generic)
 import qualified Schema as DB
 import Control.Monad.Trans.Reader
 import Control.Lens((.~), (^.), (^?), (&), re, traverse)
@@ -31,7 +33,7 @@ import qualified Network.Wreq.Types as NWT
 type StoryId = String
 type CommitMessage = String
 
-data PivotalStory = PivotalStory  { story :: DB.PivotalStory, owners :: [DB.PivotalUser] }
+data PivotalStory = PivotalStory  { story :: DB.PivotalStory, owners :: [DB.PivotalUser] } deriving Generic
 
 getStories :: World m => BL.ByteString -> ReaderT Environment m [PivotalStory]
 getStories gitLog =  liftM MB.catMaybes $ pivotalStories . storyIdsFromCommits $ lines (lazyByteStringToString gitLog)
