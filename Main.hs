@@ -14,11 +14,9 @@ import StringHelpers(lazyByteStringToString)
 import Network.Wai.Middleware.Static
 import Data.Monoid(mconcat)
 import qualified Data.Text.Lazy as T
-import PivotalTracker.Story
 import Control.Applicative((<$>))
 import qualified Data.Text.Lazy as LT
 import Control.Monad(forM)
-import PivotalTracker.Label(updateLabelsOnStories)
 import Database.Persist
 import Control.Monad.Trans.Reader( ReaderT(..))
 import Queries.Release(getReleases)
@@ -30,6 +28,7 @@ import Control.Monad.Logger(runStdoutLoggingT)
 import qualified Data.ByteString.Lazy as BL
 import App.Environment
 import World
+import PivotalTracker
 
 
 {- connStr = "host=localhost dbname=flow_api user=gust port=5432" -}

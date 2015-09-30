@@ -9,7 +9,7 @@ import Control.Monad.Trans.Control(MonadBaseControl)
 import Control.Monad.Logger(runStdoutLoggingT, MonadLogger)
 import qualified Schema as DB
 import Control.Monad.Trans(MonadIO)
-import PivotalTracker.Story(PivotalStory(..))
+import PivotalTracker
 import qualified Database.Esqueleto      as E
 import           Database.Esqueleto      ((^.))
 import Database.Persist(Entity, entityVal)

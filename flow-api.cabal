@@ -50,5 +50,5 @@ executable flow-api
       , monad-control
 
 
-  hs-source-dirs: src/ ./
+  hs-source-dirs: src/ src/lib/ ./ 
   default-language:    Haskell2010
