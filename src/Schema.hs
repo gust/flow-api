@@ -22,7 +22,7 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
 Release
   createdAt UTCTime
   gitLog T.Text Maybe
-  deriving Show Generic
+  deriving Show Generic Eq
 
 ReleaseStory
   releaseId ReleaseId
