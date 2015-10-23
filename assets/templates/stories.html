@@ -1,0 +1,14 @@
+<h3> Released {{ release.releaseCreatedAt | date:"MMMM d, yy 'at' hh:mm a" }} </h3>
+<ul class="list-group">
+  <li class="list-group-item" ng-repeat="storyData in releaseData.pivotalStories" >
+    <a target="_blank" href="{{ storyData.story.pivotalStoryUrl  }}"> {{ storyData.story.pivotalStoryName }} </a>
+    <storyTypeLabel storyType='{{ storyData.story.pivotalStoryStoryType }} '>
+    </storyTypeLabel>
+    <a href="#" style="padding-right: 20px;" ng-click="isCollapsed = !isCollapsed" class="pull-right"> View Description </a>
+    <div collapse="isCollapsed" ng-init="isCollapsed=true">
+      <pre>
+        {{ storyData.story.pivotalStoryDescription }}
+      </pre>
+    </div>
+  </li>
+</ul>

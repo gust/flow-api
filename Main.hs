@@ -21,7 +21,7 @@ import Control.Monad(forM)
 import PivotalTracker.Label(updateLabelsOnStories)
 import Database.Persist
 import Control.Monad.Trans.Reader( ReaderT(..))
-import Queries.Release(getReleases)
+import Queries.Release(getReleases, getRelease)
 import System.Environment(getEnv)
 import Control.Monad(liftM, liftM5)
 import Database.Persist.Postgresql
@@ -86,6 +86,11 @@ main =  do
        app    <- WS.param "app"
        liftIO $ labelStories (labelForApp app) environment gitLog
        WS.html . mconcat $ ["<h1>" , (T.pack $ lazyByteStringToString gitLog) , " </h1>" , "<h2>" , (T.pack $ lazyByteStringToString app) , "</h2>"]
+
+    WS.get "/releases/:id" $ do
+      id <- WS.param "id"
+      release <- liftIO $ runDbIO connectionString (getRelease . toSqlKey . fromIntegral $ read id)
+      WS.json release
 
     WS.get "/releases" $ do
       releases <- liftIO $ runDbIO connectionString getReleases

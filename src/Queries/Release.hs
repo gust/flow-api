@@ -2,17 +2,18 @@
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE DeriveGeneric #-}
 
-module Queries.Release(getReleases) where
+module Queries.Release(getReleases, getRelease) where
 
 import GHC.Generics(Generic)
 import Control.Monad.Trans.Control(MonadBaseControl)
 import Control.Monad.Logger(runStdoutLoggingT, MonadLogger)
+import Data.Int(Int64(..))
 import qualified Schema as DB
 import Control.Monad.Trans(MonadIO)
 import PivotalTracker.Story(PivotalStory(..))
 import qualified Database.Esqueleto      as E
 import           Database.Esqueleto      ((^.))
-import Database.Persist(Entity, entityVal)
+import Database.Persist(Entity, entityVal, Key(..))
 import qualified Data.Aeson as DA
 import Database.Persist.Postgresql(SqlPersistT)
 import Control.Monad(forM)
@@ -30,6 +31,12 @@ instance DA.ToJSON PivotalStory
 instance DA.ToJSON DB.PivotalUser
 
 instance DA.ToJSON ReleaseData
+getRelease ::  (MonadBaseControl IO m, MonadLogger m, MonadIO m) => DB.ReleaseId -> SqlPersistT m [ReleaseData]
+getRelease releaseId = fmap releaseDataFromSqlEntities $ E.select $ E.from $ \(release `E.InnerJoin` releaseStory `E.InnerJoin`  pivotalStory) -> do 
+                  E.on(releaseStory ^.  DB.ReleaseStoryPivotalStoryId E.==. pivotalStory ^. DB.PivotalStoryId)
+                  E.on(release ^. DB.ReleaseId E.==. releaseStory ^. DB.ReleaseStoryReleaseId)
+                  E.where_ (release ^. DB.ReleaseId E.==. E.val releaseId)
+                  return(release, releaseStory, pivotalStory)
 
 getReleases ::  (MonadBaseControl IO m, MonadLogger m, MonadIO m) =>  SqlPersistT m [ReleaseData]
 getReleases  = fmap releaseDataFromSqlEntities $ E.select $ E.from $ \(release `E.InnerJoin` releaseStory `E.InnerJoin`  pivotalStory) -> do 
