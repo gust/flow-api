@@ -33,7 +33,7 @@ import qualified Network.Wreq.Types as NWT
 type StoryId = String
 type CommitMessage = String
 
-data PivotalStory = PivotalStory  { story :: DB.PivotalStory, owners :: [DB.PivotalUser] } deriving Generic
+data PivotalStory = PivotalStory  { story :: DB.PivotalStory, owners :: [DB.PivotalUser] } deriving (Generic, Show)
 
 getStories :: World m => BL.ByteString -> ReaderT Environment m [PivotalStory]
 getStories gitLog =  liftM MB.catMaybes $ pivotalStories . storyIdsFromCommits $ lines (lazyByteStringToString gitLog)
@@ -75,7 +75,6 @@ getStory storyId = do
       let pivotalProjectId = response ^? responseBody . key "project_id"
       let pivotalStoryName = response ^? responseBody . key "name" . _String
       let pivotalStoryDescription = response ^? responseBody . key "description" . _String
-      let pivotalStoryKind = response ^? responseBody . key "kind" . _String
       let id = Just $ T.pack storyId
       let convertedProjectId = fromIntegral <$> join (extractInteger <$> pivotalProjectId)
       let requestedById = fromIntegral <$> response ^? responseBody . key "requested_by_id" . _Integer
@@ -84,7 +83,14 @@ getStory storyId = do
       let owners = extractPivotalUsers $ response ^. responseBody . key "owner_ids" . _Array
       let currentState = response ^? responseBody . key "current_state" . _String
       let estimate = response ^? responseBody . key "estimate"  . _Integer
-      let storyFromJSON = DB.PivotalStory <$> currentState <*> (fromIntegral <$> estimate) <*> convertedProjectId <*> id <*> pivotalStoryName <*> pivotalStoryDescription <*> pivotalStoryKind <*> requestedById <*> storyType <*> storyUrl
+      let storyFromJSON = DB.PivotalStory pivotalStoryDescription (fromIntegral <$> estimate) <$>
+            currentState  <*>
+            convertedProjectId <*>
+            id <*>
+            pivotalStoryName <*>
+            requestedById <*>
+            storyType <*>
+            storyUrl
       return $ PivotalStory <$> storyFromJSON <*> owners
     Left (StatusCodeException status headers _) ->
       case NHT.statusCode status of

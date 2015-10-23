@@ -31,13 +31,12 @@ ReleaseStory
   deriving Show Generic
 
 PivotalStory
+  description T.Text Maybe
+  estimate Int Maybe
   currentState T.Text
-  estimate Int
   projectId Int
   trackerId T.Text
   name T.Text
-  description T.Text
-  kind T.Text
   requestedById Int
   storyType T.Text
   url T.Text
