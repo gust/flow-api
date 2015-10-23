@@ -35,24 +35,26 @@ import World
 {- connStr = "host=localhost dbname=flow_api user=gust port=5432" -}
 
 runDbIO :: BCH.ByteString -> SqlPersistM a -> IO a
-runDbIO connStr statement = runStdoutLoggingT $ withPostgresqlConn connStr $ \connection -> do
+runDbIO connStr statement = runStdoutLoggingT $ withPostgresqlConn connStr $ \connection ->
           liftIO $ runSqlPersistM statement connection
 
 labelStories :: World m => String -> Environment -> BL.ByteString -> m ()
-labelStories label environment gitLog = do
+labelStories label environment gitLog =
   flip runReaderT environment $ do
-    stories <- (fmap story) `liftM` getStories gitLog
+    stories <- fmap story `liftM` getStories gitLog
     updateLabelsOnStories label stories
 
 getReleaseStory :: DB.ReleaseId -> DB.PivotalStoryId -> DB.ReleaseStory
-getReleaseStory releaseId storyId = DB.ReleaseStory releaseId storyId
+getReleaseStory = DB.ReleaseStory 
 
 insertPivotalStory (PivotalStory story pivotalUsers) = do
   pivotalUsers <- mapM insertIfNew pivotalUsers
   let ownerIds = fmap entityKey pivotalUsers
   storyId <- entityKey <$> insertIfNew story
-  pivotalStoryOwnerIds <- mapM insertIfNew $ map (flip DB.PivotalStoryOwner storyId) ownerIds
+  pivotalStoryOwnerIds <- mapM (insertIfNew . flip DB.PivotalStoryOwner storyId) ownerIds
   return storyId
+
+labelForApp app = "deployed to " ++ lazyByteStringToString app
 
 insertIfNew :: (MonadIO m, PersistEntityBackend val ~ backend, PersistEntity val, PersistUnique backend) => val -> ReaderT backend m (Entity val)
 insertIfNew = flip upsert []
@@ -78,25 +80,23 @@ main =  do
     WS.middleware $ staticPolicy (noDots >-> addBase "assets")
     WS.middleware logStdout
     WS.get "/" $ WS.file "index.html"
+
     WS.post "/deploys" $ do
        gitLog <- WS.param "git_log"
        app    <- WS.param "app"
-       liftIO $ BL.putStrLn gitLog
-       liftIO $ BL.putStrLn app
-       let label = "deployed to " ++ (lazyByteStringToString app)
-       liftIO $ labelStories label environment gitLog
+       liftIO $ labelStories (labelForApp app) environment gitLog
        WS.html . mconcat $ ["<h1>" , (T.pack $ lazyByteStringToString gitLog) , " </h1>" , "<h2>" , (T.pack $ lazyByteStringToString app) , "</h2>"]
+
     WS.get "/releases" $ do
       releases <- liftIO $ runDbIO connectionString getReleases
       WS.json releases
+
     WS.post "/releases" $ do
        gitLog <- WS.param "git_log"
        app    <- WS.param "app"
-       let label = "deployed to " ++ (lazyByteStringToString app)
        liftIO $ flip runReaderT environment $ do
          stories <- getStories gitLog
-         updateLabelsOnStories label $ map story stories
-         -- Why does this compile? Doesn't runStdoutLoggingT return IO??
+         updateLabelsOnStories (labelForApp app) $ map story stories
          liftIO $ runDbIO connectionString$ do
            pivotalStoryIds <- mapM insertPivotalStory stories
            time <- liftIO getCurrentTime

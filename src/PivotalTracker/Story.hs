@@ -50,18 +50,20 @@ pivotalStories storyIds = mapM getStory storyIds where
 pivotalApiOptions token = defaults & header "X-TrackerToken" .~ [token]
 
 
-logError :: World m => String -> m a
-logError = undefined
-
 formNumber :: Value -> Scientific
 formNumber (Number v) = v
 
-extractInteger :: Value -> Integer
-extractInteger (Number s) = coefficient s
-extractInteger _ = undefined
+extractInteger :: Value -> Maybe Integer
+extractInteger (Number s) = Just $ coefficient s
+extractInteger _          = Nothing
+
+fun2 :: V.Vector Value -> [Maybe Integer]
+fun2 v = extractInteger <$> V.toList v
+fun1 :: [Maybe Integer] -> Maybe [DB.PivotalUser]
+fun1 xs = Just $ DB.PivotalUser . fromIntegral <$> MB.catMaybes xs
 
 extractPivotalUsers :: V.Vector Value ->  Maybe [DB.PivotalUser]
-extractPivotalUsers v =  Just $ fmap (DB.PivotalUser . fromIntegral . extractInteger) (V.toList v)
+extractPivotalUsers =  fun1 . fun2 
 
 getStory :: World m => StoryId -> ReaderT Environment m (Maybe PivotalStory)
 getStory storyId = do
@@ -75,7 +77,7 @@ getStory storyId = do
       let pivotalStoryDescription = response ^? responseBody . key "description" . _String
       let pivotalStoryKind = response ^? responseBody . key "kind" . _String
       let id = Just $ T.pack storyId
-      let convertedProjectId = (fromIntegral . extractInteger) <$> pivotalProjectId
+      let convertedProjectId = fromIntegral <$> join (extractInteger <$> pivotalProjectId)
       let requestedById = fromIntegral <$> response ^? responseBody . key "requested_by_id" . _Integer
       let storyType = response ^? responseBody . key "story_type" . _String
       let storyUrl = response ^? responseBody . key "url" . _String
@@ -84,10 +86,8 @@ getStory storyId = do
       let estimate = response ^? responseBody . key "estimate"  . _Integer
       let storyFromJSON = DB.PivotalStory <$> currentState <*> (fromIntegral <$> estimate) <*> convertedProjectId <*> id <*> pivotalStoryName <*> pivotalStoryDescription <*> pivotalStoryKind <*> requestedById <*> storyType <*> storyUrl
       return $ PivotalStory <$> storyFromJSON <*> owners
-    Left (StatusCodeException status headers _) -> do
+    Left (StatusCodeException status headers _) ->
       case NHT.statusCode status of
         403 -> return Nothing
         404 -> return Nothing
-        _   -> do
-          {- lift . logError $ "Could not process request for story: " ++ storyId ++ " defaulting to not accepted" -}
-          return Nothing
+        _   -> return Nothing
