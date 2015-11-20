@@ -49,7 +49,6 @@ pivotalStories storyIds = mapM getStory storyIds where
 
 pivotalApiOptions token = defaults & header "X-TrackerToken" .~ [token]
 
-
 formNumber :: Value -> Scientific
 formNumber (Number v) = v
 

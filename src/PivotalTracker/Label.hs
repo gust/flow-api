@@ -41,7 +41,7 @@ module PivotalTracker.Label(updateLabelsOnStories) where
       apiToken <- pivotalTrackerApiToken `liftM` ask 
       let requestOptions = (pivotalApiOptions apiToken) & header "Content-Type" .~ ["application/json"]
       let formBody = "name" := label
-      lift $ tryRequest $ postWith requestOptions (labelsUrl story) formBody 
+      lift $ tryRequest $ postWith requestOptions (labelsUrl story) formBody
       return ()
 
 

@@ -6,6 +6,7 @@
 import qualified Schema as DB
 import Network.Wai.Middleware.RequestLogger(logStdout)
 import qualified Web.Scotty as WS
+import App.SlackIntegration(notifyNewRelease)
 import Control.Monad.Trans(MonadIO, liftIO)
 import qualified Data.Aeson as DA
 import qualified Control.Monad.State.Lazy as MS
@@ -14,6 +15,7 @@ import StringHelpers(lazyByteStringToString)
 import Network.Wai.Middleware.Static
 import Data.Monoid(mconcat)
 import qualified Data.Text.Lazy as T
+import qualified Data.Text as DT
 import PivotalTracker.Story
 import Control.Applicative((<$>))
 import qualified Data.Text.Lazy as LT
@@ -45,7 +47,7 @@ labelStories label environment gitLog =
     updateLabelsOnStories label stories
 
 getReleaseStory :: DB.ReleaseId -> DB.PivotalStoryId -> DB.ReleaseStory
-getReleaseStory = DB.ReleaseStory 
+getReleaseStory = DB.ReleaseStory
 
 insertPivotalStory (PivotalStory story pivotalUsers) = do
   pivotalUsers <- mapM insertIfNew pivotalUsers
@@ -69,16 +71,18 @@ type ReaderIO = ReaderT Environment IO ()
 runReaderIO :: Environment -> ReaderIO -> IO ()
 runReaderIO env r = runReaderT r env
 
+
+
 main :: IO ()
 main =  do
   apiToken <- BCH.pack `liftM` getEnv "PIVOTAL_TRACKER_API_TOKEN"
   connectionString <- liftM5 parsePostgresConnectionUrl (getEnv "DATABASE_HOST") (getEnv "DATABASE_NAME") (getEnv "DATABASE_USER") (getEnv "DATABASE_PASSWORD") (getEnv "DATABASE_PORT")
   runDbIO connectionString (runMigrationUnsafe DB.migrateAll)
   port <- read `liftM` getEnv "PORT"
-  let environment = Environment apiToken
+  slackEndpoint <- getEnv "SLACK_INTEGRATION_ENDPOINT"
+  let environment = Environment apiToken slackEndpoint
   WS.scotty port $ do
     WS.middleware $ staticPolicy (noDots >-> addBase "assets")
-    WS.middleware logStdout
     WS.get "/" $ WS.file "index.html"
 
     WS.post "/deploys" $ do
@@ -107,5 +111,6 @@ main =  do
            time <- liftIO getCurrentTime
            releaseId <- insert $ DB.Release time (Just . LT.toStrict . LT.pack $ lazyByteStringToString gitLog)
            let releaseStories = map (getReleaseStory releaseId) pivotalStoryIds
+           liftIO . (notifyNewRelease slackEndpoint) . DT.pack . show . unSqlBackendKey $ DB.unReleaseKey releaseId
            mapM_ insertIfNew releaseStories
        WS.html "Success!"

@@ -34,7 +34,6 @@ executable flow-api
       , scientific
       , mtl
       , vector
-      , unordered-containers
       , transformers
       , persistent-postgresql
       , persistent
@@ -43,6 +42,7 @@ executable flow-api
       , monad-logger
       , transformers
       , transformers-base
+      , unordered-containers >= 0.2.5 && < 0.3
       , conduit-extra
       , wai-extra
       , wai-middleware-static
