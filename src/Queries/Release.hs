@@ -8,7 +8,7 @@ import GHC.Generics(Generic)
 import Control.Monad.Trans.Control(MonadBaseControl)
 import Control.Monad.Logger(runStdoutLoggingT, MonadLogger)
 import Data.Int(Int64(..))
-import qualified Schema as DB
+import qualified DB.Schema as DB
 import Control.Monad.Trans(MonadIO)
 import PivotalTracker.Story(PivotalStory(..))
 import qualified Database.Esqueleto      as E

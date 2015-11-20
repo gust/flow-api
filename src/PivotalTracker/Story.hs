@@ -1,11 +1,12 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings    #-}
 
-module PivotalTracker.Story(getStories, PivotalStory(..)) where
+module PivotalTracker.Story(insertPivotalStory, getStories, PivotalStory(..)) where
 import World
 import Control.Monad.Trans(lift)
+import DB.DB(insertIfNew)
 import GHC.Generics(Generic)
-import qualified Schema as DB
+import qualified DB.Schema as DB
 import Control.Monad.Trans.Reader
 import Control.Lens((.~), (^.), (^?), (&), re, traverse)
 import Control.Monad.Trans(liftIO)
@@ -26,9 +27,10 @@ import qualified Data.Maybe as MB
 import qualified Data.HashMap.Strict as HMS
 import qualified Text.Regex as TR
 import qualified Data.Vector as V
-import App.Environment
+import App.Environment(Environment(..))
 import qualified Network.Wreq as NW
 import qualified Network.Wreq.Types as NWT
+import Database.Persist.Postgresql(entityKey)
 
 type StoryId = String
 type CommitMessage = String
@@ -37,6 +39,14 @@ data PivotalStory = PivotalStory  { story :: DB.PivotalStory, owners :: [DB.Pivo
 
 getStories :: World m => BL.ByteString -> ReaderT Environment m [PivotalStory]
 getStories gitLog =  liftM MB.catMaybes $ pivotalStories . storyIdsFromCommits $ lines (lazyByteStringToString gitLog)
+
+insertPivotalStory (PivotalStory story pivotalUsers) = do
+  pivotalUsers <- mapM insertIfNew pivotalUsers
+  let ownerIds = fmap entityKey pivotalUsers
+  storyId <- entityKey <$> insertIfNew story
+  pivotalStoryOwnerIds <- mapM (insertIfNew . flip DB.PivotalStoryOwner storyId) ownerIds
+  return storyId
+
 
 storyIdsFromCommits :: [CommitMessage] -> [StoryId]
 storyIdsFromCommits = DL.nub . concat . (MB.mapMaybe parseStoryId)

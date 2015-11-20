@@ -2,7 +2,7 @@
 module PivotalTracker.Label(updateLabelsOnStories) where
   import Control.Monad.Trans(lift)
   import World
-  import Schema
+  import DB.Schema
   import Control.Monad.Trans.Reader
   import Control.Lens((.~), (^.), (^?), (&), re)
   import qualified Data.ByteString.Char8 as BCH
@@ -16,7 +16,7 @@ module PivotalTracker.Label(updateLabelsOnStories) where
   import qualified Data.Maybe as MB
   import qualified Data.HashMap.Strict as HMS
   import qualified Data.Vector as V
-  import App.Environment
+  import App.Environment(Environment(..))
   import qualified Network.Wreq as NW
   import qualified Network.Wreq.Types as NWT
 

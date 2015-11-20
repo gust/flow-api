@@ -12,7 +12,7 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
-module Schema where
+module DB.Schema where
 import Database.Persist.TH
 import GHC.Generics(Generic)
 import qualified Data.Text as T
