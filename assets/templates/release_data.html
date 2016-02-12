@@ -2,13 +2,14 @@
   <h3> Released {{ releaseData.release.releaseCreatedAt | date:"MMMM d, yy 'at' hh:mm a" }} </h3>
   <ul class="list-group">
     <li class="list-group-item" ng-repeat="storyData in releaseData.pivotalStories" >
-      <a target="_blank" href="{{ storyData.story.pivotalStoryUrl  }}"> {{ storyData.story.pivotalStoryName }} </a>
       <storyTypeLabel storyType='{{ storyData.story.pivotalStoryStoryType }} '>
       </storyTypeLabel>
-      <a href="#" style="padding-right: 20px;" ng-click="isCollapsed = !isCollapsed" class="pull-right"> View Description </a>
-      <div collapse="isCollapsed" ng-init="isCollapsed=true">
+      <a style="padding-right: 20px;" ng-click="isCollapsed = !isCollapsed" class="pull-right"> View Description </a>
+      <a class="hidden-xs" target="_blank" href="{{ storyData.story.pivotalStoryUrl  }}"> {{ storyData.story.pivotalStoryName | limitTo:70}} </a>
+      <a class="visible-xs" target="_blank" href="{{ storyData.story.pivotalStoryUrl  }}"> {{ storyData.story.pivotalStoryName | limitTo:30}} </a>
+      <div ng-init="isCollapsed=true" uib-collapse="isCollapsed" >
         <pre>
-        {{ storyData.story.pivotalStoryDescription }}
+          {{ storyData.story.pivotalStoryDescription }}
         </pre>
       </div>
     </li>

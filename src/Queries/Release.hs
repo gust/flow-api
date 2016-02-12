@@ -2,7 +2,7 @@
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE DeriveGeneric #-}
 
-module Queries.Release(getReleases, getRelease) where
+module Queries.Release(getReleases, getRelease, releaseCount) where
 
 import GHC.Generics(Generic)
 import Control.Monad.Trans.Control(MonadBaseControl)
@@ -13,10 +13,11 @@ import Control.Monad.Trans(MonadIO)
 import PivotalTracker.Story(PivotalStory(..))
 import qualified Database.Esqueleto      as E
 import           Database.Esqueleto      ((^.))
-import Database.Persist(Entity, entityVal, Key(..))
+import Database.Persist(SelectOpt(..),selectKeysList, count ,Entity, entityVal, Key(..), Filter)
 import qualified Data.Aeson as DA
 import Database.Persist.Postgresql(SqlPersistT)
 import Control.Monad(forM)
+import Pagination(Pagination(..), pOffset)
 import Data.List(find)
 import qualified Control.Monad.State.Lazy as MS
 
@@ -38,12 +39,18 @@ getRelease releaseId = fmap releaseDataFromSqlEntities $ E.select $ E.from $ \(r
                   E.where_ (release ^. DB.ReleaseId E.==. E.val releaseId)
                   return(release, releaseStory, pivotalStory)
 
-getReleases ::  (MonadBaseControl IO m, MonadLogger m, MonadIO m) =>  SqlPersistT m [ReleaseData]
-getReleases  = fmap releaseDataFromSqlEntities $ E.select $ E.from $ \(release `E.InnerJoin` releaseStory `E.InnerJoin`  pivotalStory) -> do 
-                  E.on(releaseStory ^.  DB.ReleaseStoryPivotalStoryId E.==. pivotalStory ^. DB.PivotalStoryId)
-                  E.on(release ^. DB.ReleaseId E.==. releaseStory ^. DB.ReleaseStoryReleaseId)
-                  return(release, releaseStory, pivotalStory)
+getReleases ::  (MonadBaseControl IO m, MonadLogger m, MonadIO m) => Pagination ->  SqlPersistT m [ReleaseData]
+getReleases pagination = do
+          releaseIds <- selectKeysList [] [ LimitTo (perPage pagination), OffsetBy (pOffset pagination), Desc DB.ReleaseCreatedAt] :: MonadIO m => SqlPersistT m [DB.ReleaseId]
+          fmap releaseDataFromSqlEntities $  E.select $ E.from $ \(release `E.InnerJoin` releaseStory `E.InnerJoin`  pivotalStory) -> do 
+                E.on(releaseStory ^.  DB.ReleaseStoryPivotalStoryId E.==. pivotalStory ^. DB.PivotalStoryId)
+                E.on(release ^. DB.ReleaseId E.==. releaseStory ^. DB.ReleaseStoryReleaseId)
+                E.where_ (release ^. DB.ReleaseId `E.in_` E.valList releaseIds)
+                return(release, releaseStory, pivotalStory)
 
+
+releaseCount :: (MonadBaseControl IO m, MonadLogger m, MonadIO m) => SqlPersistT m Int
+releaseCount = count ([] :: [Filter DB.Release])
 
 releaseDataFromSqlEntities :: [(Entity DB.Release, Entity DB.ReleaseStory, Entity DB.PivotalStory) ] -> [ReleaseData]
 releaseDataFromSqlEntities xs = groupReleases $ fmap extractEntityValues xs

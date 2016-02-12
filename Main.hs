@@ -3,10 +3,15 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE GADTs    #-}
 
+import Data.Maybe(Maybe(..), maybe)
+import Pagination(Pagination(..))
 import qualified Schema as DB
+import Data.Vector(fromList)
 import Network.Wai.Middleware.RequestLogger(logStdout)
+import Data.Scientific(scientific)
 import qualified Web.Scotty as WS
 import App.SlackIntegration(notifyNewRelease)
+import qualified Data.HashMap.Strict as Map
 import Control.Monad.Trans(MonadIO, liftIO)
 import qualified Data.Aeson as DA
 import qualified Control.Monad.State.Lazy as MS
@@ -23,7 +28,7 @@ import Control.Monad(forM)
 import PivotalTracker.Label(updateLabelsOnStories)
 import Database.Persist
 import Control.Monad.Trans.Reader( ReaderT(..))
-import Queries.Release(getReleases, getRelease)
+import Queries.Release(getReleases, getRelease, releaseCount)
 import System.Environment(getEnv)
 import Control.Monad(liftM, liftM5)
 import Database.Persist.Postgresql
@@ -71,13 +76,15 @@ type ReaderIO = ReaderT Environment IO ()
 runReaderIO :: Environment -> ReaderIO -> IO ()
 runReaderIO env r = runReaderT r env
 
+getParam :: WS.Parsable a => LT.Text -> WS.ActionM (Maybe a)
+getParam paramName = WS.rescue (Just <$> WS.param paramName) $ (\_ -> return Nothing)
 
 
 main :: IO ()
 main =  do
   apiToken <- BCH.pack `liftM` getEnv "PIVOTAL_TRACKER_API_TOKEN"
   connectionString <- liftM5 parsePostgresConnectionUrl (getEnv "DATABASE_HOST") (getEnv "DATABASE_NAME") (getEnv "DATABASE_USER") (getEnv "DATABASE_PASSWORD") (getEnv "DATABASE_PORT")
-  runDbIO connectionString (runMigrationUnsafe DB.migrateAll)
+  runDbIO connectionString  (runMigrationUnsafe DB.migrateAll)
   port <- read `liftM` getEnv "PORT"
   slackEndpoint <- getEnv "SLACK_INTEGRATION_ENDPOINT"
   let environment = Environment apiToken slackEndpoint
@@ -97,8 +104,12 @@ main =  do
       WS.json release
 
     WS.get "/releases" $ do
-      releases <- liftIO $ runDbIO connectionString getReleases
-      WS.json releases
+      pageNumber <- maybe 1 id <$> getParam "page"
+      count <- liftIO $ runDbIO connectionString releaseCount
+      let pagination = Pagination 10 pageNumber count
+      releases <- liftIO $ runDbIO connectionString (getReleases pagination)
+      let releaseData =  Map.singleton "releases" (DA.toJSON releases)  :: Map.HashMap DT.Text DA.Value
+      WS.json $ Map.insert ("pagination" :: DT.Text) (DA.toJSON pagination) releaseData
 
     WS.post "/releases" $ do
        gitLog <- WS.param "git_log"
@@ -106,7 +117,7 @@ main =  do
        liftIO $ flip runReaderT environment $ do
          stories <- getStories gitLog
          updateLabelsOnStories (labelForApp app) $ map story stories
-         liftIO $ runDbIO connectionString$ do
+         liftIO $ runDbIO connectionString  $ do
            pivotalStoryIds <- mapM insertPivotalStory stories
            time <- liftIO getCurrentTime
            releaseId <- insert $ DB.Release time (Just . LT.toStrict . LT.pack $ lazyByteStringToString gitLog)

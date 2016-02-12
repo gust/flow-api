@@ -1,6 +1,8 @@
-<h1> Gust Releases </h1>
-<div class="col-md-6" >
-  <section ng-repeat="releaseData in releasesCtrl.releases">
+<div class="col-lg-8 col-lg-offset-2" >
+  <h1> Gust Releases </h1>
+  <uib-pagination total-items="releasesCtrl.totalItems" items-per-page="releasesCtrl.perPage" ng-model="releasesCtrl.currentPage" ng-change="releasesCtrl.pageChanged()"></uib-pagination>
+  <section ng-repeat="releaseData in releasesCtrl.releases | orderBy :'-release.releaseCreatedAt'">
     <release release-data="releaseData"></release >
   </section>
+  <uib-pagination total-items="releasesCtrl.totalItems" items-per-page="releasesCtrl.perPage" ng-model="releasesCtrl.currentPage" ng-change="releasesCtrl.pageChanged()"></uib-pagination>
 </div>

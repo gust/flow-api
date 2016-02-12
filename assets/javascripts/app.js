@@ -1,4 +1,4 @@
-angular.module("flowApi", ['ui.router', 'ui.bootstrap.collapse']);
+angular.module("flowApi", ['ui.router', 'ui.bootstrap.collapse', 'ui.bootstrap.pagination', 'uib/template/pagination/pagination.html']);
 
 angular.module('flowApi').config(['$stateProvider', function($stateProvider){
   $stateProvider
@@ -13,11 +13,21 @@ angular.module('flowApi').config(['$stateProvider', function($stateProvider){
       'main': {
         templateUrl: '/templates/releases.html',
         controllerAs: "releasesCtrl",
-        controller: [ 'releaseResource', function(releaseResource){
+        controller: [ 'releaseResource', '$scope', function(releaseResource, $scope){
           var _this = this;
-          releaseResource.all().then(function(result){
-            _this.releases = result.data;
-          });
+
+          this.pageChanged = function(){
+            getReleases({ page: _this.currentPage });
+          }
+          getReleases({});
+          function getReleases(params) {
+            releaseResource.all(params).then(function(result){
+              _this.totalItems = result.data.pagination.totalResults;
+              _this.currentPage = result.data.pagination.page;
+              _this.perPage = result.data.pagination.perPage;
+              _this.releases = result.data.releases;
+            });
+          }
         }]
       }
     }
@@ -42,8 +52,8 @@ angular.module('flowApi').config(['$stateProvider', function($stateProvider){
 
 angular.module('flowApi').factory('releaseResource',['$http', function($http){
   releaseResource = {};
-  releaseResource.all = function(){
-    return $http.get('/releases');
+  releaseResource.all = function(params){
+    return $http.get('/releases', {  params: (params || {}) });
   };
 
   releaseResource.find = function(id){
