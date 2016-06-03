@@ -1,19 +1,21 @@
 <div>
-  <h3> Released {{ releaseData.release.releaseCreatedAt | date:"MMMM d, yy 'at' hh:mm a" }} </h3>
+  <h3> Released {{ releaseData.release.releaseCreatedAt | date:"MMMM d yyyy 'at' hh:mm a" }} </h3>
   <div class="alert alert-warning" ng-show="releaseData.pivotalStories.length == 0 && releaseData.release.releaseGitLog.split('*').length > 1 ">
-     It looks like the commits on this release didn't match up to any stories in pivotal tracker! Here's
+     It looks like the commits in this release didn't match up to any stories in pivotal tracker! Here's
      the full log of what went out
   </div>
+
   <div class="alert alert-danger" ng-show="releaseData.pivotalStories.length == 0 && releaseData.release.releaseGitLog.split('*').length <= 1 ">
     Snap, the commit log we received from heroku was empty. I'm not sure why this happens.
   </div>
+
   <ul class="list-group" ng-show="releaseData.pivotalStories.length == 0 && releaseData.release.releaseGitLog.split('*').length > 1" >
     <li class="list-group-item" ng-repeat="commitMessage in releaseData.release.releaseGitLog.split('*') track by $index">
         {{ commitMessage }}
     </li>
   </ul>
 
-  <div ng-hide="releaseData.pivotalStories.length == 0">
+  <div ng-show="releaseData.pivotalStories.length > 0">
     <ul class="list-group" >
       <li class="list-group-item" ng-repeat="storyData in releaseData.pivotalStories" >
         <storyTypeLabel storyType='{{ storyData.story.pivotalStoryStoryType }} '>

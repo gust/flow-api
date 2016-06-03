@@ -33,7 +33,7 @@ instance DA.ToJSON DB.PivotalUser
 
 instance DA.ToJSON ReleaseData
 getRelease ::  (MonadBaseControl IO m, MonadLogger m, MonadIO m) => DB.ReleaseId -> SqlPersistT m [ReleaseData]
-getRelease releaseId = fmap releaseDataFromSqlEntities $ E.select $ E.from $ \(release `E.InnerJoin` releaseStory `E.InnerJoin`  pivotalStory) -> do 
+getRelease releaseId = fmap releaseDataFromSqlEntities $ E.select $ E.from $ \(release `E.LeftOuterJoin` releaseStory `E.LeftOuterJoin`  pivotalStory) -> do 
                   E.on(releaseStory ?.  DB.ReleaseStoryPivotalStoryId E.==. pivotalStory ?. DB.PivotalStoryId)
                   E.on(E.just(release ^. DB.ReleaseId) E.==. releaseStory ?. DB.ReleaseStoryReleaseId)
                   E.where_ (release ^. DB.ReleaseId E.==. E.val releaseId)
