@@ -12,7 +12,7 @@ import qualified Schema as DB
 import Control.Monad.Trans(MonadIO)
 import PivotalTracker.Story(PivotalStory(..))
 import qualified Database.Esqueleto      as E
-import           Database.Esqueleto      ((^.))
+import           Database.Esqueleto      ((^.), (?.))
 import Database.Persist(SelectOpt(..),selectKeysList, count ,Entity, entityVal, Key(..), Filter)
 import qualified Data.Aeson as DA
 import Database.Persist.Postgresql(SqlPersistT)
@@ -34,17 +34,17 @@ instance DA.ToJSON DB.PivotalUser
 instance DA.ToJSON ReleaseData
 getRelease ::  (MonadBaseControl IO m, MonadLogger m, MonadIO m) => DB.ReleaseId -> SqlPersistT m [ReleaseData]
 getRelease releaseId = fmap releaseDataFromSqlEntities $ E.select $ E.from $ \(release `E.InnerJoin` releaseStory `E.InnerJoin`  pivotalStory) -> do 
-                  E.on(releaseStory ^.  DB.ReleaseStoryPivotalStoryId E.==. pivotalStory ^. DB.PivotalStoryId)
-                  E.on(release ^. DB.ReleaseId E.==. releaseStory ^. DB.ReleaseStoryReleaseId)
+                  E.on(releaseStory ?.  DB.ReleaseStoryPivotalStoryId E.==. pivotalStory ?. DB.PivotalStoryId)
+                  E.on(E.just(release ^. DB.ReleaseId) E.==. releaseStory ?. DB.ReleaseStoryReleaseId)
                   E.where_ (release ^. DB.ReleaseId E.==. E.val releaseId)
                   return(release, releaseStory, pivotalStory)
 
 getReleases ::  (MonadBaseControl IO m, MonadLogger m, MonadIO m) => Pagination ->  SqlPersistT m [ReleaseData]
 getReleases pagination = do
           releaseIds <- selectKeysList [] [ LimitTo (perPage pagination), OffsetBy (pOffset pagination), Desc DB.ReleaseCreatedAt] :: MonadIO m => SqlPersistT m [DB.ReleaseId]
-          fmap releaseDataFromSqlEntities $  E.select $ E.from $ \(release `E.InnerJoin` releaseStory `E.InnerJoin`  pivotalStory) -> do 
-                E.on(releaseStory ^.  DB.ReleaseStoryPivotalStoryId E.==. pivotalStory ^. DB.PivotalStoryId)
-                E.on(release ^. DB.ReleaseId E.==. releaseStory ^. DB.ReleaseStoryReleaseId)
+          fmap releaseDataFromSqlEntities $  E.select $ E.from $ \(release `E.LeftOuterJoin` releaseStory `E.LeftOuterJoin`  pivotalStory) -> do 
+                E.on(releaseStory ?.  DB.ReleaseStoryPivotalStoryId E.==. pivotalStory ?. DB.PivotalStoryId)
+                E.on((E.just $ release ^. DB.ReleaseId) E.==. releaseStory ?. DB.ReleaseStoryReleaseId)
                 E.where_ (release ^. DB.ReleaseId `E.in_` E.valList releaseIds)
                 return(release, releaseStory, pivotalStory)
 
@@ -52,13 +52,13 @@ getReleases pagination = do
 releaseCount :: (MonadBaseControl IO m, MonadLogger m, MonadIO m) => SqlPersistT m Int
 releaseCount = count ([] :: [Filter DB.Release])
 
-releaseDataFromSqlEntities :: [(Entity DB.Release, Entity DB.ReleaseStory, Entity DB.PivotalStory) ] -> [ReleaseData]
+releaseDataFromSqlEntities :: [(Entity DB.Release, Maybe (Entity DB.ReleaseStory), Maybe (Entity DB.PivotalStory)) ] -> [ReleaseData]
 releaseDataFromSqlEntities xs = groupReleases $ fmap extractEntityValues xs
-  where extractEntityValues (a, b, c) = (entityVal a, entityVal b, entityVal c)
+  where extractEntityValues (a, b, c) = (entityVal a, entityVal <$> b, entityVal <$> c)
 
 --This method is probably poorly performant. We could use Data.Map instead of an array for storage here
 --Which should perform better
-groupReleases :: [(DB.Release, DB.ReleaseStory, DB.PivotalStory)] -> [ReleaseData]
+groupReleases :: [(DB.Release, Maybe DB.ReleaseStory, Maybe  DB.PivotalStory)] -> [ReleaseData]
 groupReleases xs = flip MS.execState [] $ forM xs $ \releaseData@(release, _, st) -> do
                      releases <- MS.get
                      case findRelease release releases of
@@ -68,16 +68,19 @@ groupReleases xs = flip MS.execState [] $ forM xs $ \releaseData@(release, _, st
     filterExistingRelease :: ReleaseData -> [ReleaseData] -> [ReleaseData]
     filterExistingRelease releaseData = filter (/= releaseData)
 
-    updateReleaseData :: ReleaseData -> (DB.Release, DB.ReleaseStory, DB.PivotalStory) -> ReleaseData
+    updateReleaseData :: ReleaseData -> (DB.Release, Maybe DB.ReleaseStory, Maybe DB.PivotalStory) -> ReleaseData
     updateReleaseData releaseData (release, _, st) = ReleaseData (addStory releaseData st) release
       where
-        addStory :: ReleaseData -> DB.PivotalStory -> [PivotalStory]
-        addStory (ReleaseData stories _) st = case find (\x -> (DB.pivotalStoryUrl $ story x) == (DB.pivotalStoryUrl st)) stories  of
+        addStory :: ReleaseData -> Maybe DB.PivotalStory -> [PivotalStory]
+        addStory _ Nothing =  []
+        addStory (ReleaseData stories _) (Just st) = case find (\x -> (DB.pivotalStoryUrl $ story x) == (DB.pivotalStoryUrl st)) stories  of
                                                       Just existingStory ->  stories
                                                       Nothing             -> (PivotalStory st []) : stories
 
-    newRelease :: (DB.Release, DB.ReleaseStory, DB.PivotalStory) -> ReleaseData
-    newRelease (release, _, story) = ReleaseData [PivotalStory story []] release
+    newRelease :: (DB.Release, Maybe DB.ReleaseStory, Maybe DB.PivotalStory) -> ReleaseData
+    newRelease (release, _, Nothing)      = ReleaseData [] release
+    newRelease (release, _, (Just story)) = ReleaseData [PivotalStory story []] release
+
     findRelease :: DB.Release -> [ReleaseData] -> Maybe ReleaseData
     findRelease r1 releases = flip find releases $ \releaseData -> do
                       DB.releaseCreatedAt (release releaseData) == DB.releaseCreatedAt r1
