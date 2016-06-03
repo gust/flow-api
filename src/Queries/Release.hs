@@ -5,6 +5,7 @@
 module Queries.Release(getReleases, getRelease, releaseCount) where
 
 import GHC.Generics(Generic)
+import Control.Applicative((<$>))
 import Control.Monad.Trans.Control(MonadBaseControl)
 import Control.Monad.Logger(runStdoutLoggingT, MonadLogger)
 import Data.Int(Int64(..))
